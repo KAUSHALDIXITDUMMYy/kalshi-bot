@@ -1,0 +1,5 @@
+/kalshi-rfq-bot
+/kalshi-rfq-bot.exe
+.env
+*.pem
+*.key
