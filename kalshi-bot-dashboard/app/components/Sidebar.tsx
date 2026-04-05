@@ -11,9 +11,10 @@ import {
   Power,
   Zap,
   Cpu,
-  LogOut,
-  ChevronRight,
-  Monitor
+  Monitor,
+  Globe,
+  Users,
+  History
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -29,64 +30,98 @@ const NAV_ITEMS = [
 ];
 
 export function Sidebar({ className }: { className?: string }) {
+  const pathname = usePathname();
+  const isAdmin = pathname?.startsWith("/admin");
+
+  const NAV_ITEMS = isAdmin ? [
+    { icon: Globe, label: "Fleet Overview", href: "/admin/dashboard" },
+    { icon: Users, label: "User Management", href: "/admin/users" },
+    { icon: Activity, label: "Platform Intel", href: "/admin/intel" },
+    { icon: ShieldAlert, label: "Global Risk", href: "/admin/risk" },
+    { icon: Settings, label: "System Config", href: "/admin/config" },
+  ] : [
+    { icon: LayoutDashboard, label: "Node Terminal", href: "/user/dashboard" },
+    { icon: Zap, label: "Manual Override", href: "/user/override" },
+    { icon: Activity, label: "Live Bids", href: "/user/bids" },
+    { icon: PieChart, label: "Session PnL", href: "/user/pnl" },
+    { icon: History, label: "History", href: "/user/history" },
+    { icon: MessageSquareCode, label: "Bot Logic", href: "/user/logic" },
+  ];
+
   return (
     <aside className={cn("w-64 glass-card border-r border-white/5 flex flex-col p-6 z-50 h-screen sticky top-0", className)}>
       {/* Brand */}
-      <div className="flex items-center gap-3 mb-12 px-2">
-        <div className="w-10 h-10 bg-cyan-neon/10 border border-cyan-neon/30 rounded-xl flex items-center justify-center shadow-[0_0_15px_rgba(0,245,255,0.1)]">
-          <Monitor className="text-cyan-neon" size={20} />
+      <div className="flex items-center gap-3 mb-10 px-2">
+        <div className={cn(
+          "w-10 h-10 rounded-xl flex items-center justify-center shadow-lg border",
+          isAdmin ? "bg-magenta-cyber/10 border-magenta-cyber/30" : "bg-cyan-neon/10 border-cyan-neon/30"
+        )}>
+          {isAdmin ? <Cpu className="text-magenta-cyber" size={20} /> : <Monitor className="text-cyan-neon" size={20} /> }
         </div>
         <div className="flex flex-col">
-          <span className="text-lg font-bold tracking-tight text-white uppercase leading-none mb-1">Kalshi Pro</span>
-          <span className="text-[10px] font-mono text-cyan-neon/60 tracking-widest uppercase">Operator Node</span>
+          <span className="text-lg font-black tracking-tighter text-white uppercase leading-none mb-1">
+            {isAdmin ? "Fleet" : "Kalshi"} <span className={isAdmin ? "text-magenta-cyber" : "text-cyan-neon"}>{isAdmin ? "Cmd" : "Pro"}</span>
+          </span>
+          <span className="text-[9px] font-black font-mono text-white/20 tracking-[0.2em] uppercase">
+            {isAdmin ? "Global Intelligence" : "Operator Node"}
+          </span>
         </div>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 space-y-2">
-        {NAV_ITEMS.map((item) => (
-          <Link key={item.label} href={item.href}>
-            <div className={cn(
-              "flex items-center justify-between group px-4 py-3.5 rounded-xl transition-all duration-300 relative overflow-hidden",
-              item.active 
-                ? "bg-cyan-neon/10 text-cyan-neon border border-cyan-neon/20 shadow-[0_4px_20px_rgba(0,245,255,0.1)]" 
-                : "text-neutral-400 hover:text-white hover:bg-white/[0.03] border border-transparent"
-            )}>
-              <div className="flex items-center gap-3.5 z-10 relative">
-                <item.icon size={18} className={cn("transition-transform group-hover:scale-110", item.active && "drop-shadow-[0_0_5px_rgba(0,245,255,0.8)]")} />
-                <span className="text-sm font-bold tracking-wide uppercase">{item.label}</span>
+      <nav className="flex-1 space-y-1.5">
+        <div className="text-[9px] font-black uppercase tracking-[0.3em] text-white/10 mb-4 px-4 italic">
+          {isAdmin ? "Fleet Management" : "Node Operations"}
+        </div>
+        {NAV_ITEMS.map((item) => {
+          const isActive = pathname === item.href;
+          return (
+            <Link key={item.label} href={item.href}>
+              <div className={cn(
+                "flex items-center justify-between group px-4 py-3 rounded-xl transition-all duration-300 relative overflow-hidden border mb-1",
+                isActive 
+                  ? (isAdmin ? "bg-magenta-cyber/10 text-magenta-cyber border-magenta-cyber/20 shadow-[0_0_20px_rgba(255,0,255,0.1)]" : "bg-cyan-neon/10 text-cyan-neon border-cyan-neon/20 shadow-[0_0_20px_rgba(0,245,255,0.1)]")
+                  : "text-white/30 hover:text-white hover:bg-white/[0.02] border-transparent"
+              )}>
+                <div className="flex items-center gap-3.5 z-10 relative">
+                  <item.icon size={16} className={cn(
+                    "transition-transform group-hover:scale-110", 
+                    isActive && (isAdmin ? "drop-shadow-[0_0_5px_rgba(255,0,255,0.8)]" : "drop-shadow-[0_0_5px_rgba(0,245,255,0.8)]")
+                  )} />
+                  <span className="text-[11px] font-black tracking-wider uppercase">{item.label}</span>
+                </div>
+                {isActive && <div className={cn("w-1 h-1 rounded-full", isAdmin ? "bg-magenta-cyber shadow-[0_0_5px_magenta]" : "bg-cyan-neon shadow-[0_0_5px_cyan]")} />}
               </div>
-              {item.active && <ChevronRight size={14} className="z-10" />}
-              
-              {/* Hover Glow */}
-              <div className="absolute inset-0 bg-gradient-to-r from-cyan-neon/0 to-cyan-neon/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-            </div>
-          </Link>
-        ))}
+            </Link>
+          );
+        })}
       </nav>
 
-      {/* Account / Kill */}
+      {/* Profile & Footer */}
       <div className="space-y-4 pt-6 mt-6 border-t border-white/5">
-        <div className="p-4 bg-white/[0.03] rounded-2xl border border-white/5 space-y-3">
+        <div className="p-4 bg-white/[0.02] rounded-2xl border border-white/5 group hover:border-white/10 transition-all cursor-pointer">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-neon to-magenta-cyber p-[1px]">
-              <div className="w-full h-full bg-background rounded-xl flex items-center justify-center font-bold text-xs">
-                OP
+            <div className={cn(
+              "w-9 h-9 rounded-lg p-[1px]",
+              isAdmin ? "bg-gradient-to-tr from-magenta-cyber to-purple-500" : "bg-gradient-to-tr from-cyan-neon to-blue-500"
+            )}>
+              <div className="w-full h-full bg-[#0A0A0C] rounded-[7px] flex items-center justify-center font-black text-[10px] text-white">
+                {isAdmin ? "AD" : "OP"}
               </div>
             </div>
-            <div className="flex flex-col">
-              <span className="text-xs font-bold text-white uppercase">Operator_01</span>
+            <div className="flex flex-col min-w-0">
+              <span className="text-[10px] font-black text-white uppercase truncate">{isAdmin ? "Admin_Root" : "Operator_01"}</span>
               <div className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 bg-cyan-neon rounded-full animate-pulse shadow-[0_0_5px_rgba(0,245,255,0.8)]" />
-                <span className="text-[10px] font-bold text-cyan-neon uppercase">Live</span>
+                <span className={cn("w-1 h-1 rounded-full animate-pulse", isAdmin ? "bg-magenta-cyber" : "bg-cyan-neon")} />
+                <span className="text-[8px] font-black text-white/30 uppercase tracking-widest">{isAdmin ? "Auth: Root" : "Auth: Secure"}</span>
               </div>
             </div>
           </div>
         </div>
         
-        <button className="w-full py-4 glass-card border-red-500/20 hover:border-red-500/40 hover:bg-red-500/5 group text-red-500/80 hover:text-red-500 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 uppercase tracking-widest text-[10px] font-bold">
-          <Power size={14} className="group-hover:scale-110 group-hover:drop-shadow-[0_0_8px_red] transition-all" />
-          Terminate Session
+        <button className="w-full py-4 text-white/20 hover:text-magenta-cyber bg-white/[0.02] hover:bg-magenta-cyber/5 border border-white/5 hover:border-magenta-cyber/20 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 uppercase tracking-[0.3em] text-[10px] font-black group">
+          <Power size={14} className="group-hover:rotate-90 transition-transform duration-500" />
+          Disconnect
         </button>
       </div>
     </aside>

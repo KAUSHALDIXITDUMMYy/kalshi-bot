@@ -24,116 +24,163 @@ import { DashboardHeader } from "@/app/components/DashboardHeader";
 import { useState } from "react";
 
 const STATS = [
-  { label: "RFQs Detected", value: "1,245", trend: "+12%", color: "text-cyan-neon", icon: Activity },
-  { label: "Quote Participation", value: "88%", trend: "+2%", color: "text-cyan-neon", icon: Layers },
-  { label: "Acceptance Rate", value: "32%", trend: "-5%", color: "text-magenta-cyber", icon: Target },
-  { label: "Daily PnL", value: "+$452.12", trend: "+$45", color: "text-chart-green", icon: TrendingUp },
+  { label: "Active Nodes", value: "01", trend: "CONNECTED", color: "text-cyan-neon", icon: Activity },
+  { label: "Quote Power", value: "82.4%", trend: "+2.1%", color: "text-cyan-neon", icon: Layers },
+  { label: "Session PnL", value: "+$42.12", trend: "7.2%", color: "text-chart-green", icon: TrendingUp },
+  { label: "Uptime", value: "14:32:01", trend: "99.9%", color: "text-cyan-neon", icon: Zap },
 ];
 
 const POSITIONS = [
   { market: "AAPL-24MAR26-C250", side: "YES", qty: 50, avg: 0.45, pnl: "+$12.50", status: "ACTIVE" },
   { market: "FED-RATE-HIKE-SEP", side: "NO", qty: 120, avg: 0.12, pnl: "+$4.80", status: "ACTIVE" },
   { market: "BTC-USD-80K-EOM", side: "YES", qty: 15, avg: 0.68, pnl: "-$2.15", status: "ACTIVE" },
-  { market: "NVDA-SPLIT-CONFIRM", side: "YES", qty: 200, avg: 0.33, pnl: "+$44.00", status: "ACTIVE" },
 ];
 
 const LOGS = [
-  { time: "14:32:01", type: "RFQ", msg: "AAPL YES 0.44", status: "QUOTE SENT" },
-  { time: "14:31:45", type: "RFQ", msg: "TSLA NO 0.35", status: "FILLED" },
-  { time: "14:29:02", type: "RFQ", msg: "AMZN YES 0.88", status: "EXPIRED" },
-  { time: "14:28:12", type: "RFQ", msg: "SPY-PUT-500 YES 0.15", status: "QUOTE SENT" },
-  { time: "14:27:44", type: "RISK", msg: "MAX POSITION LIMIT REACHED [NVDA]", status: "ALERT" },
+  { time: "16:04:12", type: "RFQ", msg: "NVDA YES 0.44", status: "PENDING" },
+  { time: "16:03:55", type: "WS", msg: "COMMUNICATION_CHANNEL_STABLE", status: "OK" },
+  { time: "16:02:12", type: "QUOTE", msg: "AMZN YES 0.88", status: "SENT" },
+  { time: "16:01:44", type: "SYSTEM", msg: "ENGINE_IGNITED", status: "ACTIVE" },
 ];
 
 export default function UserDashboard() {
   const [isBotOn, setIsBotOn] = useState(true);
 
   return (
-    <div className="flex bg-background text-foreground min-h-screen">
+    <div className="flex bg-[#08080A] text-foreground min-h-screen font-display">
       <Sidebar />
       
-      <main className="flex-1 relative">
+      <main className="flex-1 relative overflow-y-auto h-screen scrollbar-hide">
         <DashboardHeader title="Operator Terminal" />
         
-        <div className="p-10 space-y-10">
+        <div className="p-10 space-y-10 max-w-7xl mx-auto">
+          {/* Top Bar: Bot Health & Connection Status */}
+          <div className="flex items-center justify-between bg-white/[0.01] p-6 rounded-[32px] border border-white/5 shadow-xl">
+            <div className="flex items-center gap-8">
+              <div className="flex items-center gap-4 px-5 py-2.5 bg-cyan-neon/5 rounded-2xl border border-cyan-neon/20">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-neon opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-neon shadow-[0_0_8px_cyan]"></span>
+                </span>
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-neon">WebSocket Mesh: Connected</span>
+              </div>
+              <div className="flex items-center gap-4 px-5 py-2.5 bg-white/[0.03] rounded-2xl border border-white/10">
+                <ShieldCheck size={14} className="text-white/40" />
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">Auth: Secure_v2</span>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-4">
+              <button className="p-2.5 rounded-xl bg-white/[0.03] border border-white/5 text-white/40 hover:text-white transition-colors">
+                <RefreshCw size={18} />
+              </button>
+              <button className="p-2.5 rounded-xl bg-white/[0.03] border border-white/5 text-white/40 hover:text-white transition-colors">
+                <Settings size={18} />
+              </button>
+            </div>
+          </div>
+
           {/* Stats Grid */}
-          <div className="grid grid-cols-4 gap-6">
+          <div className="grid grid-cols-4 gap-4">
             {STATS.map((stat, i) => (
               <motion.div 
                 key={stat.label}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.1 }}
-                className="glass-card p-6 rounded-2xl border border-white/5 relative group hover:border-cyan-neon/20 transition-all shadow-[0_4px_20px_rgba(0,0,0,0.5)] overflow-hidden"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: i * 0.05 }}
+                className="glass-card p-5 rounded-2xl border border-white/5 relative group hover:border-cyan-neon/10 transition-all"
               >
-                {/* Background Glow */}
-                <div className={`absolute top-0 right-0 w-24 h-24 blur-[60px] opacity-10 ${stat.color.replace('text-', 'bg-')}`} />
-                
                 <div className="flex items-center justify-between mb-4">
-                  <div className={cn("p-3 rounded-xl bg-white/[0.03] border border-white/5", stat.color)}>
-                    <stat.icon size={20} className="drop-shadow-[0_0_8px_rgba(0,245,255,0.4)]" />
+                  <div className={cn("p-2 rounded-lg bg-white/[0.03] border border-white/5", stat.color)}>
+                    <stat.icon size={16} />
                   </div>
-                  <div className={cn("text-[10px] font-black tracking-widest uppercase px-2 py-1 rounded bg-white/[0.03]", stat.trend.includes('-') ? "text-magenta-cyber" : "text-cyan-neon")}>
+                  <div className="text-[9px] font-black tracking-[0.2em] uppercase px-2 py-0.5 rounded-full bg-white/[0.02] text-white/40">
                     {stat.trend}
                   </div>
                 </div>
-                
-                <h3 className="text-white/40 text-[10px] font-black uppercase tracking-widest mb-1">{stat.label}</h3>
-                <p className="text-3xl font-black tracking-tight text-white mb-1 drop-shadow-[0_0_10px_rgba(255,255,255,0.1)]">{stat.value}</p>
-                <div className="w-full h-1 bg-white/[0.03] rounded-full overflow-hidden mt-4">
-                  <motion.div 
-                    initial={{ width: 0 }} 
-                    animate={{ width: "70%" }} 
-                    className={cn("h-full", stat.color.replace('text-', 'bg-'))} 
-                  />
-                </div>
+                <h3 className="text-white/30 text-[9px] font-black uppercase tracking-widest mb-1">{stat.label}</h3>
+                <p className="text-2xl font-black tracking-tight text-white">{stat.value}</p>
               </motion.div>
             ))}
           </div>
 
           <div className="grid grid-cols-12 gap-8">
-            {/* Left Column: Positions */}
-            <motion.div 
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="col-span-8 flex flex-col gap-8"
-            >
-              <div className="glass-card rounded-3xl border border-white/5 overflow-hidden shadow-2xl relative">
-                <div className="px-8 py-6 border-b border-white/5 flex items-center justify-between bg-white/[0.01]">
+            {/* Left Column: Data Stream & Manual Intervention */}
+            <div className="col-span-8 flex flex-col gap-8">
+              
+              {/* Manual Action Center */}
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="glass-card rounded-3xl border border-white/5 overflow-hidden shadow-2xl relative"
+              >
+                <div className="px-8 py-5 border-b border-white/5 bg-white/[0.01] flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <Activity size={20} className="text-cyan-neon" />
-                    <h2 className="text-lg font-black uppercase tracking-tight text-white">Active Positions</h2>
+                    <Terminal size={18} className="text-cyan-neon" />
+                    <h2 className="text-sm font-black uppercase tracking-tight text-white">Manual Intervention HUD</h2>
                   </div>
-                  <div className="flex items-center gap-2 text-[10px] font-bold text-white/40 uppercase">
-                    Real-time Data Stream
-                    <span className="w-1.5 h-1.5 bg-cyan-neon rounded-full animate-pulse shadow-[0_0_8px_rgba(0,245,255,0.8)]" />
+                  <span className="text-[10px] font-black tracking-widest text-white/20 uppercase italic">Override Authority Enabled</span>
+                </div>
+                <div className="p-8 grid grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <h4 className="text-[9px] font-black uppercase tracking-widest text-white/30 px-1">RFQ Pipeline Actions</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button className="py-4 bg-white/[0.03] border border-white/5 hover:bg-magenta-cyber/10 hover:border-magenta-cyber/30 rounded-2xl text-[10px] font-black text-white/60 hover:text-magenta-cyber uppercase tracking-widest transition-all">
+                        Delete RFQ
+                      </button>
+                      <button className="py-4 bg-white/[0.03] border border-white/5 hover:bg-cyan-neon/10 hover:border-cyan-neon/30 rounded-2xl text-[10px] font-black text-white/60 hover:text-cyan-neon uppercase tracking-widest transition-all">
+                        Accept Quote
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <h4 className="text-[9px] font-black uppercase tracking-widest text-white/30 px-1">Active Quote Actions</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button className="py-4 bg-white/[0.03] border border-white/5 hover:bg-magenta-cyber/10 hover:border-magenta-cyber/30 rounded-2xl text-[10px] font-black text-white/60 hover:text-magenta-cyber uppercase tracking-widest transition-all">
+                        Delete Quote
+                      </button>
+                      <button className="py-4 bg-white/[0.03] border border-white/5 hover:bg-cyan-neon/10 hover:border-cyan-neon/30 rounded-2xl text-[10px] font-black text-white/60 hover:text-cyan-neon uppercase tracking-widest transition-all">
+                        Confirm Quote
+                      </button>
+                    </div>
                   </div>
                 </div>
-                
-                <div className="p-0">
+              </motion.div>
+
+              {/* Positions Table */}
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="glass-card rounded-3xl border border-white/5 overflow-hidden shadow-2xl"
+              >
+                <div className="px-8 py-5 border-b border-white/5 flex items-center justify-between bg-white/[0.01]">
+                  <div className="flex items-center gap-3">
+                    <Activity size={18} className="text-white/40" />
+                    <h2 className="text-sm font-black uppercase tracking-tight text-white">Active Positions</h2>
+                  </div>
+                </div>
+                <div className="p-0 overflow-x-auto">
                   <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-white/[0.01]">
-                        <th className="px-8 py-4 text-[10px] font-black uppercase text-white/30 tracking-widest">Market</th>
-                        <th className="px-8 py-4 text-[10px] font-black uppercase text-white/30 tracking-widest">Side</th>
-                        <th className="px-8 py-4 text-[10px] font-black uppercase text-white/30 tracking-widest text-center">Qty</th>
-                        <th className="px-8 py-4 text-[10px] font-black uppercase text-white/30 tracking-widest text-center">Avg Price</th>
-                        <th className="px-8 py-4 text-[10px] font-black uppercase text-white/30 tracking-widest text-right">Current P/L</th>
+                    <thead className="bg-white/[0.01]">
+                      <tr>
+                        <th className="px-8 py-4 text-[9px] font-black uppercase text-white/20 tracking-widest">Market</th>
+                        <th className="px-8 py-4 text-[9px] font-black uppercase text-white/20 tracking-widest">Side</th>
+                        <th className="px-8 py-4 text-[9px] font-black uppercase text-white/20 tracking-widest text-center">Qty</th>
+                        <th className="px-8 py-4 text-[9px] font-black uppercase text-white/20 tracking-widest text-right">P/L Session</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
                       {POSITIONS.map((pos, i) => (
-                        <tr key={i} className="group hover:bg-white/[0.02] transition-colors cursor-pointer">
-                          <td className="px-8 py-5 text-sm font-bold text-white tracking-wide">{pos.market}</td>
+                        <tr key={i} className="group hover:bg-white/[0.01] transition-colors">
+                          <td className="px-8 py-5 text-sm font-bold text-white/70">{pos.market}</td>
                           <td className="px-8 py-5">
                             <span className={cn(
-                              "text-[10px] font-black px-2.5 py-1 rounded tracking-widest",
-                              pos.side === "YES" ? "bg-cyan-neon/10 text-cyan-neon border border-cyan-neon/30" : "bg-magenta-cyber/10 text-magenta-cyber border border-magenta-cyber/30"
+                              "text-[9px] font-black px-2 py-0.5 rounded tracking-widest border",
+                              pos.side === "YES" ? "text-cyan-neon border-cyan-neon/20 bg-cyan-neon/5" : "text-magenta-cyber border-magenta-cyber/20 bg-magenta-cyber/5"
                             )}>{pos.side}</span>
                           </td>
-                          <td className="px-8 py-5 text-center font-mono text-sm text-white">{pos.qty}</td>
-                          <td className="px-8 py-5 text-center font-mono text-sm text-white">${pos.avg}</td>
-                          <td className={cn("px-8 py-5 text-right font-mono text-sm font-bold", pos.pnl.startsWith('+') ? "text-chart-green" : "text-chart-red")}>
+                          <td className="px-8 py-5 text-center font-mono text-sm text-white/40">{pos.qty}</td>
+                          <td className={cn("px-8 py-5 text-right font-mono text-sm font-black", pos.pnl.startsWith('+') ? "text-chart-green" : "text-chart-red")}>
                             {pos.pnl}
                           </td>
                         </tr>
@@ -141,139 +188,80 @@ export default function UserDashboard() {
                     </tbody>
                   </table>
                 </div>
-              </div>
+              </motion.div>
+            </div>
 
-              {/* Logs */}
-              <div className="glass-card rounded-3xl border border-white/5 shadow-2xl overflow-hidden relative">
-                <div className="px-8 py-6 border-b border-white/5 flex items-center justify-between bg-white/[0.01]">
-                  <div className="flex items-center gap-3">
-                    <Terminal size={20} className="text-white/40" />
-                    <h2 className="text-lg font-black uppercase tracking-tight text-white">System Activity Logs</h2>
+            {/* Right Column: Execution Controls & Activity */}
+            <div className="col-span-4 flex flex-col gap-8">
+              <div className="glass-card rounded-3xl border border-white/5 p-8 flex flex-col gap-10">
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">Execution Engine</h3>
+                    <div className={cn(
+                      "w-2 h-2 rounded-full",
+                      isBotOn ? "bg-cyan-neon shadow-[0_0_8px_rgba(0,245,255,0.6)] animate-pulse" : "bg-white/10"
+                    )} />
                   </div>
-                  <div className="flex gap-4">
-                    <div className="flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 bg-neutral-400 rounded-full" />
-                      <span className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Quote Sent</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 bg-cyan-neon rounded-full shadow-[0_0_5px_rgba(0,245,255,0.8)]" />
-                      <span className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Filled</span>
-                    </div>
+
+                  <div className="space-y-3">
+                    <button 
+                      onClick={() => setIsBotOn(!isBotOn)}
+                      className={cn(
+                        "w-full py-5 rounded-2xl transition-all duration-300 font-black uppercase tracking-[0.2em] text-sm flex items-center justify-center gap-3",
+                        isBotOn 
+                          ? "bg-magenta-cyber/10 text-magenta-cyber border border-magenta-cyber/20 hover:bg-magenta-cyber/20" 
+                          : "bg-cyan-neon text-black hover:scale-[1.02]"
+                      )}
+                    >
+                      {isBotOn ? <ZapOff size={18} /> : <Zap size={18} />}
+                      {isBotOn ? "Deactivate" : "Ignite Engine"}
+                    </button>
+                    <p className="text-[9px] font-bold text-white/20 text-center uppercase tracking-widest">
+                      {isBotOn ? "Engine in Active Monitoring" : "Engine on Standby Mode"}
+                    </p>
                   </div>
                 </div>
-                
-                <div className="p-8 space-y-4 max-h-[300px] overflow-y-auto font-mono scrollbar-hide">
-                  {LOGS.map((log, i) => (
-                    <div key={i} className="flex items-center justify-between group border-b border-white/[0.02] pb-4">
-                      <div className="flex items-center gap-6">
-                        <span className="text-xs text-white/20 font-bold">{log.time}</span>
-                        <div className="flex items-center gap-2 text-xs font-bold">
-                          <span className={cn(
-                            "px-1.5 py-0.5 rounded text-[10px] bg-white/[0.03]",
-                            log.type === "RISK" ? "text-magenta-cyber" : "text-neutral-500"
-                          )}>{log.type}:</span>
-                          <span className="text-white/70 group-hover:text-white transition-colors uppercase tracking-tight">{log.msg}</span>
+
+                <div className="space-y-6 border-t border-white/5 pt-10">
+                   <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40 mb-6">Trading Strategy</h3>
+                   <div className="space-y-4">
+                      {['Market Making', 'Spread Arbitrage', 'Linear Volatility'].map((type) => (
+                        <div key={type} className="flex items-center justify-between p-4 rounded-xl bg-white/[0.02] border border-white/5 group hover:border-cyan-neon/20 transition-all cursor-pointer">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-white/40 group-hover:text-white">{type}</span>
+                          <div className={cn("w-1.5 h-1.5 rounded-full", type === 'Market Making' ? "bg-cyan-neon" : "bg-white/5")} />
                         </div>
+                      ))}
+                   </div>
+                </div>
+              </div>
+
+              {/* Logs Card */}
+              <div className="glass-card rounded-3xl border border-white/5 overflow-hidden flex flex-col flex-1 min-h-[400px]">
+                <div className="px-8 py-5 border-b border-white/5 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <History size={16} className="text-white/20" />
+                    <h2 className="text-[10px] font-black uppercase tracking-widest text-white/40">Event Stream</h2>
+                  </div>
+                </div>
+                <div className="p-8 space-y-5 overflow-y-auto font-mono scrollbar-hide">
+                  {LOGS.map((log, i) => (
+                    <div key={i} className="flex flex-col gap-1.5 opacity-60 hover:opacity-100 transition-opacity">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[9px] font-black text-white/20 uppercase tracking-widest">{log.type}</span>
+                        <span className="text-[9px] font-bold text-white/10">{log.time}</span>
                       </div>
-                      <span className={cn(
-                        "text-[9px] font-black uppercase tracking-[0.2em] px-2 py-1 bg-white/[0.02] border border-white/5 rounded-full transition-all group-hover:border-white/10",
-                        log.status === "FILLED" ? "text-cyan-neon border-cyan-neon/20 shadow-[0_0_10px_rgba(0,245,255,0.1)]" : "text-white/20"
-                      )}>{log.status}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold text-white tracking-tight">{log.msg}</span>
+                        <span className={cn(
+                          "text-[8px] font-black uppercase px-1.5 py-0.5 rounded",
+                          log.status === "OK" || log.status === "ACTIVE" ? "text-cyan-neon bg-cyan-neon/10" : "text-white/20 bg-white/5"
+                        )}>{log.status}</span>
+                      </div>
                     </div>
                   ))}
                 </div>
               </div>
-            </motion.div>
-
-            {/* Right Column: Controls */}
-            <motion.div 
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="col-span-4 flex flex-col gap-8"
-            >
-              <div className="glass-card rounded-3xl border border-white/5 shadow-2xl overflow-hidden p-8 flex flex-col gap-10 relative">
-                {/* Emergency Stop */}
-                <button className="w-full py-10 bg-chart-red/10 border border-chart-red/30 hover:bg-chart-red/20 group rounded-3xl transition-all duration-300 relative overflow-hidden flex flex-col items-center justify-center gap-4 active:scale-95 shadow-[0_0_40px_rgba(255,0,0,0.1)]">
-                  <div className="absolute inset-0 bg-gradient-to-tr from-chart-red/0 to-chart-red/40 opacity-0 group-hover:opacity-100 transition-opacity" />
-                  <Power size={48} className="text-chart-red group-hover:scale-110 group-hover:drop-shadow-[0_0_15px_red] transition-all" />
-                  <span className="text-2xl font-black uppercase text-chart-red tracking-widest z-10">EMERGENCY STOP</span>
-                </button>
-
-                {/* Bot Control */}
-                <div className="space-y-6">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-xs font-black uppercase tracking-widest text-white/40">Execution Control</h3>
-                    <div className={cn(
-                      "flex items-center gap-1.5 px-2 py-1 rounded-full border bg-white/[0.02]",
-                      isBotOn ? "text-cyan-neon border-cyan-neon/30 shadow-[0_0_10px_rgba(0,245,255,0.1)]" : "text-neutral-500 border-white/5"
-                    )}>
-                      <span className={cn("w-1.5 h-1.5 rounded-full", isBotOn ? "bg-cyan-neon animate-pulse" : "bg-neutral-500")} />
-                      <span className="text-[10px] font-black uppercase tracking-widest">{isBotOn ? "Engine Running" : "Engine Standby"}</span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="glass-card p-5 rounded-2xl border border-white/5 space-y-3 hover:border-white/10 transition-colors">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-black uppercase text-white/30 tracking-widest">Base Strategy</span>
-                        <Settings size={14} className="text-white/20" />
-                      </div>
-                      <select className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-4 py-3 text-xs font-bold uppercase tracking-widest text-white outline-none focus:border-cyan-neon/30 transition-all appearance-none">
-                        <option>Bot Logic: Spread-based</option>
-                        <option>Bot Logic: Fixed-price</option>
-                        <option>Bot Logic: Orderbook-match</option>
-                      </select>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="glass-card p-5 rounded-2xl border border-white/5 space-y-3">
-                        <span className="text-[10px] font-black uppercase text-white/30 tracking-widest">Max Daily Loss</span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-white/20 font-bold">$</span>
-                          <input type="number" placeholder="500" className="bg-transparent w-full text-lg font-black text-white outline-none placeholder:text-white/10" />
-                        </div>
-                      </div>
-                      <div className="glass-card p-5 rounded-2xl border border-white/5 space-y-3">
-                        <span className="text-[10px] font-black uppercase text-white/30 tracking-widest">Max Position</span>
-                        <div className="flex items-center gap-2">
-                          <input type="number" placeholder="100" className="bg-transparent w-full text-lg font-black text-white outline-none placeholder:text-white/10" />
-                          <span className="text-white/20 font-bold text-xs">QTY</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="glass-card p-5 rounded-2xl border border-white/5 space-y-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-black uppercase text-white/30 tracking-widest">Risk Exposure Matrix</span>
-                        <ShieldCheck size={14} className="text-cyan-neon" />
-                      </div>
-                      <div className="w-full h-32 flex items-center justify-center relative">
-                        {/* Fake Dial */}
-                        <div className="w-24 h-24 rounded-full border-[8px] border-white/[0.03] border-t-cyan-neon shadow-[0_0_20px_rgba(0,245,255,0.1)] relative">
-                          <div className="absolute inset-0 flex flex-col items-center justify-center">
-                            <span className="text-xs font-black text-white">$12.4k</span>
-                            <span className="text-[8px] font-bold text-cyan-neon uppercase">Safe Zone</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <button 
-                      onClick={() => setIsBotOn(!isBotOn)}
-                      className={cn(
-                        "w-full py-4 rounded-2xl transition-all duration-300 font-black uppercase tracking-[0.2em] text-sm flex items-center justify-center gap-3 active:scale-95 shadow-lg",
-                        isBotOn 
-                          ? "bg-magenta-cyber/20 text-magenta-cyber border border-magenta-cyber/30 hover:bg-magenta-cyber/30" 
-                          : "bg-cyan-neon text-background shadow-cyan-neon/20 hover:shadow-cyan-neon/30"
-                      )}
-                    >
-                      {isBotOn ? <ZapOff size={20} /> : <Zap size={20} />}
-                      {isBotOn ? "Deactivate Engine" : "Ignite Engine"}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
+            </div>
           </div>
         </div>
       </main>

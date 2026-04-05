@@ -13,9 +13,14 @@ import (
 	"rfqbot/internal/kalshi"
 	"rfqbot/internal/pricing"
 	"rfqbot/internal/ws"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	// Load .env file if it exists
+	_ = godotenv.Load()
+
 	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	cfg, err := config.FromEnv()

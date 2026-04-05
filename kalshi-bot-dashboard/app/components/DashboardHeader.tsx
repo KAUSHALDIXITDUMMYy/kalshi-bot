@@ -9,29 +9,31 @@ export function DashboardHeader({ title }: { title: string }) {
   const [isPractice, setIsPractice] = useState(true);
 
   return (
-    <header className="h-20 glass-card sticky top-0 border-b border-white/5 flex items-center justify-between px-10 z-40 bg-background/50 backdrop-blur-3xl">
-      {/* Title */}
+    <header className="h-20 glass-card sticky top-0 border-b border-white/5 flex items-center justify-between px-8 z-40 bg-background/50 backdrop-blur-3xl shrink-0">
+      {/* Title & Status */}
       <motion.div 
         initial={{ opacity: 0, x: -10 }} 
         animate={{ opacity: 1, x: 0 }} 
-        className="flex items-center gap-6"
+        className="flex items-center gap-8 min-w-0"
       >
-        <h1 className="text-2xl font-black tracking-tight uppercase text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.1)]">
+        <h1 className="text-lg font-black tracking-tighter uppercase text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.1)] whitespace-nowrap shrink-0">
           {title}
         </h1>
         
+        <div className="h-6 w-px bg-white/5 shrink-0" />
+
         {/* Status Pills */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-cyan-neon/10 border border-cyan-neon/30 rounded-full">
-            <div className="w-2 h-2 bg-cyan-neon rounded-full animate-pulse shadow-[0_0_8px_rgba(0,245,255,0.8)]" />
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-2.5 px-3 py-1.5 bg-cyan-neon/5 border border-cyan-neon/20 rounded-xl">
+            <div className="w-1.5 h-1.5 bg-cyan-neon rounded-full animate-pulse shadow-[0_0_8px_rgba(0,245,255,0.8)]" />
             <span className="text-[10px] font-black text-cyan-neon uppercase tracking-widest leading-none">WebSocket: Connected</span>
-            <div className="h-3 w-[1px] bg-white/10 mx-1" />
-            <span className="text-[10px] font-mono text-cyan-neon uppercase tracking-widest leading-none">12ms</span>
+            <div className="h-3 w-[1px] bg-white/10 mx-0.5" />
+            <span className="text-[10px] font-mono text-cyan-neon/60 uppercase tracking-widest leading-none">12ms</span>
           </div>
           
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-magenta-cyber/10 border border-magenta-cyber/30 rounded-full">
+          <div className="flex items-center gap-2.5 px-3 py-1.5 bg-magenta-cyber/5 border border-magenta-cyber/20 rounded-xl">
             <Activity className="text-magenta-cyber" size={12} />
-            <span className="text-[10px] font-black text-magenta-cyber uppercase tracking-widest leading-none">Bot Engine: Nominal</span>
+            <span className="text-[10px] font-black text-magenta-cyber uppercase tracking-widest leading-none outline-none">Bot Engine: Nominal</span>
           </div>
         </div>
       </motion.div>
