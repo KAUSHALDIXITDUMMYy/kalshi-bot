@@ -21,6 +21,10 @@ type Config struct {
 	ShardFactor     int
 	ShardKey        int
 	ConfirmParallel bool // confirm in separate goroutine (still immediate)
+
+	// Infrastructure
+	DBURL    string
+	RedisURL string
 }
 
 func FromEnv() (*Config, error) {
@@ -32,6 +36,8 @@ func FromEnv() (*Config, error) {
 		Strategy:       strings.TrimSpace(os.Getenv("KALSHI_STRATEGY")),
 		FixedYesBid:    strings.TrimSpace(os.Getenv("KALSHI_FIXED_YES_BID")),
 		FixedNoBid:     strings.TrimSpace(os.Getenv("KALSHI_FIXED_NO_BID")),
+		DBURL:          strings.TrimSpace(os.Getenv("DATABASE_URL")),
+		RedisURL:       strings.TrimSpace(os.Getenv("REDIS_URL")),
 	}
 
 	if c.APIKeyID == "" {
@@ -51,6 +57,13 @@ func FromEnv() (*Config, error) {
 	c.DryRun = getenvBool("KALSHI_DRY_RUN", true)
 	c.QuoteEnabled = getenvBool("KALSHI_QUOTE_ENABLED", false)
 	c.ConfirmParallel = getenvBool("KALSHI_CONFIRM_PARALLEL", true)
+
+	if c.DBURL == "" {
+		c.DBURL = "postgres://kalshi:kalshibot123@localhost:5433/rfqbot?sslmode=disable"
+	}
+	if c.RedisURL == "" {
+		c.RedisURL = "redis://localhost:6379"
+	}
 
 	if c.Strategy == "" {
 		c.Strategy = "noop"

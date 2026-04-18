@@ -11,7 +11,10 @@ import {
   Terminal,
   Cpu,
   Save,
-  RotateCcw
+  RotateCcw,
+  Activity,
+  Target,
+  Scaling
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Sidebar } from "@/app/components/Sidebar";
@@ -28,37 +31,37 @@ export default function LogicPage() {
       <main className="flex-1 relative overflow-y-auto h-screen scrollbar-hide">
         <DashboardHeader title="Bot Intelligence Configuration" />
         
-        <div className="p-8 space-y-8 max-w-7xl mx-auto">
+        <div className="p-10 space-y-10 max-w-7xl mx-auto">
           {/* Quick Stats / Health */}
-          <div className="flex items-center justify-between glass-card p-6 rounded-[32px] border-white/5 shadow-2xl">
-            <div className="flex items-center gap-8">
+          <div className="flex items-center justify-between glass-card p-8 rounded-[40px] border-white/5 shadow-2xl">
+            <div className="flex items-center gap-10">
               <div className="flex flex-col">
-                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-white/20 mb-1">Engine Kernel</span>
-                <div className="flex items-center gap-2">
-                  <Cpu size={14} className="text-cyan-neon" />
-                  <span className="text-sm font-black text-white">v2.4.1-STABLE</span>
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/20 mb-2">Engine Kernel</span>
+                <div className="flex items-center gap-3">
+                  <Cpu size={16} className="text-cyan-neon" />
+                  <span className="text-base font-black text-white italic">v2.4.1-STABLE</span>
                 </div>
               </div>
-              <div className="h-8 w-px bg-white/5" />
-              <div className="flex flex-col text-center">
-                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-white/20 mb-1">Quote Propagation</span>
-                <span className="text-sm font-black text-chart-green font-mono">1.2ms Avg</span>
+              <div className="h-10 w-px bg-white/5" />
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/20 mb-2">Quote Propagation</span>
+                <span className="text-base font-black text-chart-green font-mono">1.2ms Avg</span>
               </div>
             </div>
 
             <div className="flex items-center gap-4">
-              <button className="flex items-center gap-2 px-6 py-3 bg-white/[0.03] border border-white/5 rounded-2xl text-white/40 hover:text-white transition-all text-[11px] font-black uppercase tracking-widest">
-                 <RotateCcw size={14} /> Reset Defaults
+              <button className="flex items-center gap-2 px-6 py-4 bg-white/[0.03] border border-white/5 rounded-2xl text-white/40 hover:text-white transition-all text-[11px] font-black uppercase tracking-widest">
+                 <RotateCcw size={14} /> Flash Logic
               </button>
-              <button className="flex items-center gap-2 px-8 py-3 bg-cyan-neon text-black rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] shadow-[0_0_20px_rgba(0,245,255,0.2)] hover:scale-[1.02] transition-all">
-                 <Save size={14} /> Commit Changes
+              <button className="flex items-center gap-2 px-10 py-4 bg-cyan-neon text-black rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] shadow-[0_0_20px_rgba(0,245,255,0.2)] hover:scale-[1.02] transition-all font-mono">
+                 <Save size={14} /> COMMIT_CHANGE
               </button>
             </div>
           </div>
 
           <div className="grid grid-cols-12 gap-8">
             {/* Sidebar Controls */}
-            <div className="col-span-3 flex flex-col gap-2">
+            <div className="col-span-3 flex flex-col gap-3">
               {[
                 { id: "STRATEGY", label: "Pricing Strategy", icon: Layers },
                 { id: "RISK", label: "Risk Mitigation", icon: ShieldCheck },
@@ -69,13 +72,13 @@ export default function LogicPage() {
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={cn(
-                    "flex items-center gap-4 px-6 py-4 rounded-2xl border transition-all text-left group",
+                    "flex items-center gap-4 px-6 py-5 rounded-2xl border transition-all text-left group",
                     activeTab === tab.id 
                       ? "bg-cyan-neon/10 border-cyan-neon/20 text-cyan-neon shadow-[0_0_15px_rgba(0,245,255,0.1)]" 
                       : "bg-white/[0.01] border-white/5 text-white/40 hover:text-white hover:bg-white/[0.03]"
                   )}
                 >
-                  <tab.icon size={18} className={cn("transition-transform group-hover:scale-110", activeTab === tab.id ? "drop-shadow-[0_0_5px_rgba(0,245,255,0.8)]" : "opacity-40")} />
+                  <tab.icon size={20} className={cn("transition-transform group-hover:scale-110", activeTab === tab.id ? "drop-shadow-[0_0_5px_rgba(0,245,255,0.8)]" : "opacity-40")} />
                   <span className="text-[11px] font-black uppercase tracking-widest leading-none">{tab.label}</span>
                 </button>
               ))}
@@ -87,13 +90,13 @@ export default function LogicPage() {
                 key={activeTab}
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
-                className="glass-card rounded-[40px] border-white/5 p-10 shadow-2xl h-full min-h-[500px]"
+                className="glass-card rounded-[40px] border-white/5 p-10 shadow-2xl h-full min-h-[550px]"
               >
                 {activeTab === "STRATEGY" && (
-                  <div className="space-y-10">
+                  <div className="space-y-12">
                     <div className="flex items-center justify-between">
                        <h2 className="text-xl font-black text-white tracking-tight uppercase italic">{activeTab} Parameters</h2>
-                       <div className="px-3 py-1 rounded-full bg-cyan-neon/10 border border-cyan-neon/20 text-cyan-neon text-[9px] font-black uppercase tracking-widest">Optimized for Latency</div>
+                       <div className="px-4 py-1.5 rounded-full bg-cyan-neon/10 border border-cyan-neon/20 text-cyan-neon text-[9px] font-black uppercase tracking-widest">Optimized for Kalshi-v2</div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-10">
@@ -116,7 +119,7 @@ export default function LogicPage() {
                       <div className="space-y-6">
                         <div className="flex items-center justify-between">
                           <label className="text-[11px] font-black uppercase tracking-widest text-white/40">Target Spread Width</label>
-                          <span className="text-xs font-mono font-black text-cyan-neon">0.05 pts</span>
+                          <span className="text-xs font-mono font-black text-magenta-cyber">0.05 pts</span>
                         </div>
                         <div className="relative w-full h-8 flex items-center group">
                           <div className="w-full h-2 bg-white/[0.05] rounded-full overflow-hidden">
@@ -124,20 +127,52 @@ export default function LogicPage() {
                           </div>
                           <div className="absolute left-[30%] top-1/2 -translate-y-1/2 w-4 h-4 bg-magenta-cyber rounded-full border-4 border-[#08080A] shadow-[0_0_10px_rgba(255,0,128,1)] cursor-pointer" />
                         </div>
-                        <p className="text-[9px] font-bold text-white/20 italic">Maintain tight spread profiles to capture maximum volume.</p>
+                        <p className="text-[9px] font-bold text-white/20 italic">Minimum acceptable distance between 'Yes' and 'No' quotes.</p>
                       </div>
 
-                      <div className="col-span-2 p-6 bg-white/[0.01] border border-white/5 rounded-3xl space-y-4">
-                         <div className="flex items-center gap-3">
-                            <Info size={16} className="text-cyan-neon/40" />
-                            <h4 className="text-[10px] font-black uppercase tracking-widest text-white/60 leading-none">Automated Re-pricing Logic</h4>
-                         </div>
-                         <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-white/40">Dynamic Spread Expansion on Volatility</span>
-                            <div className="w-12 h-6 bg-cyan-neon/20 border border-cyan-neon/30 rounded-full relative cursor-pointer">
-                               <div className="absolute right-1 top-1 w-4 h-4 bg-cyan-neon rounded-full shadow-[0_0_10px_cyan]" />
-                            </div>
-                         </div>
+                      <div className="col-span-2 space-y-4">
+                        {[
+                          { label: "Dynamic Volatility Mapping", desc: "Expands spread automatically on market delta spikes.", icon: Activity, value: "ENABLED" },
+                          { label: "Target Alpha Alpha Offset", desc: "Adjusts bias based on external oracle signals.", icon: Target, value: "0.02" },
+                          { label: "Leg Liquidity Scaling", desc: "Adjusts size per-leg based on order-book depth.", icon: Scaling, value: "ACTIVE" }
+                        ].map((rule) => (
+                           <div key={rule.label} className="p-6 bg-white/[0.02] border border-white/5 rounded-[24px] flex items-center justify-between group hover:border-cyan-neon/30 transition-all cursor-pointer">
+                              <div className="flex items-center gap-6">
+                                 <div className="w-12 h-12 rounded-2xl bg-white/[0.03] flex items-center justify-center text-white/20 group-hover:text-cyan-neon group-hover:bg-cyan-neon/10 transition-all">
+                                    <rule.icon size={20} />
+                                 </div>
+                                 <div>
+                                    <h4 className="text-[11px] font-black uppercase tracking-widest text-white mb-1">{rule.label}</h4>
+                                    <p className="text-[9px] font-bold text-white/20 uppercase tracking-widest">{rule.desc}</p>
+                                 </div>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                 <span className="text-[10px] font-mono text-cyan-neon font-black">{rule.value}</span>
+                                 <div className="w-1.5 h-1.5 rounded-full bg-cyan-neon shadow-[0_0_8px_cyan]" />
+                              </div>
+                           </div>
+                        ))}
+                      </div>
+
+                      {/* HVM Gateway Control */}
+                      <div className="col-span-2 space-y-4 pt-10">
+                        <div className="flex items-center justify-between bg-magenta-cyber/5 border border-magenta-cyber/20 p-8 rounded-[36px]">
+                           <div className="flex items-center gap-6">
+                              <div className="w-14 h-14 rounded-3xl bg-magenta-cyber/10 flex items-center justify-center text-magenta-cyber shadow-[0_0_20px_rgba(255,0,128,0.2)]">
+                                 <Zap size={24} />
+                              </div>
+                              <div>
+                                 <h4 className="text-sm font-black uppercase tracking-tight text-white mb-1">HVM (High Volatility Mode) Gateway</h4>
+                                 <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest leading-relaxed max-w-md">Forces 1s confirmation windows for highly liquid markets. Disabling this may lead to execution timeouts on HVM tickers.</p>
+                              </div>
+                           </div>
+                           <div className="flex items-center gap-6">
+                              <span className="text-[10px] font-black uppercase tracking-widest text-magenta-cyber font-mono animate-pulse">AUTO_CONFIRM_ENABLED</span>
+                              <div className="w-12 h-6 bg-magenta-cyber/20 rounded-full relative cursor-pointer border border-magenta-cyber/30 p-1">
+                                 <div className="absolute right-1 top-1 w-4 h-4 bg-magenta-cyber rounded-full" />
+                              </div>
+                           </div>
+                        </div>
                       </div>
                     </div>
                   </div>

@@ -17,13 +17,13 @@ import (
 type Handler func(ctx context.Context, payload []byte)
 
 // RunDialLoop connects with Kalshi auth headers, subscribes to communications, and processes messages until ctx done.
-func RunDialLoop(ctx context.Context, log *slog.Logger, wsURL string, signer *auth.Signer, onMessage Handler, shardFactor, shardKey int) {
+func RunDialLoop(ctx context.Context, log *slog.Logger, wsURL string, signer *auth.Signer, onMessage Handler, channels []string, params map[string]any, shardFactor, shardKey int) {
 	backoff := time.Second
 	for {
 		if ctx.Err() != nil {
 			return
 		}
-		err := oneConnection(ctx, log, wsURL, signer, onMessage, shardFactor, shardKey)
+		err := oneConnection(ctx, log, wsURL, signer, onMessage, channels, params, shardFactor, shardKey)
 		if ctx.Err() != nil {
 			return
 		}
@@ -44,7 +44,7 @@ func RunDialLoop(ctx context.Context, log *slog.Logger, wsURL string, signer *au
 
 var cmdID atomic.Uint32
 
-func oneConnection(ctx context.Context, log *slog.Logger, wsURL string, signer *auth.Signer, onMessage Handler, shardFactor, shardKey int) error {
+func oneConnection(ctx context.Context, log *slog.Logger, wsURL string, signer *auth.Signer, onMessage Handler, channels []string, extraParams map[string]any, shardFactor, shardKey int) error {
 	ts := strconv.FormatInt(time.Now().UnixMilli(), 10)
 	sig, err := signer.SignWebSocket(ts)
 	if err != nil {
@@ -69,22 +69,25 @@ func oneConnection(ctx context.Context, log *slog.Logger, wsURL string, signer *
 	})
 
 	subID := cmdID.Add(1)
+	subParams := map[string]any{
+		"channels": channels,
+	}
+	for k, v := range extraParams {
+		subParams[k] = v
+	}
 	sub := map[string]any{
-		"id":  subID,
-		"cmd": "subscribe",
-		"params": map[string]any{
-			"channels": []string{"communications"},
-		},
+		"id":     subID,
+		"cmd":    "subscribe",
+		"params": subParams,
 	}
 	if shardFactor > 0 {
-		p := sub["params"].(map[string]any)
-		p["shard_factor"] = shardFactor
-		p["shard_key"] = shardKey
+		subParams["shard_factor"] = shardFactor
+		subParams["shard_key"] = shardKey
 	}
 	if err := conn.WriteJSON(sub); err != nil {
 		return err
 	}
-	log.Info("subscribed to communications", "cmd_id", subID)
+	log.Info("subscribed", "channels", channels, "cmd_id", subID)
 
 	readErr := make(chan error, 1)
 	go func() {

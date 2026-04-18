@@ -20,10 +20,10 @@ import { Sidebar } from "@/app/components/Sidebar";
 import { DashboardHeader } from "@/app/components/DashboardHeader";
 
 const FLEET_STATS = [
-  { label: "Platform Revenue", value: "$4.2M", trend: "+12.4%", color: "text-cyan-neon", icon: TrendingUp },
-  { label: "Active User Nodes", value: "852", trend: "NOMINAL", color: "text-cyan-neon", icon: Users },
-  { label: "System Load Index", value: "24%", trend: "STABLE", color: "text-chart-green", icon: Activity },
-  { label: "API Health", value: "99.9%", trend: "OPTIMAL", color: "text-cyan-neon", icon: Server },
+  { label: "Fleet Quote Rate", value: "852/sec", trend: "NOMINAL", color: "text-cyan-neon", icon: Zap },
+  { label: "Active User Nodes", value: "852", trend: "OPTIMAL", color: "text-cyan-neon", icon: Users },
+  { label: "HVM Fleet Ratio", value: "24.2%", trend: "142 NODES", color: "text-magenta-cyber", icon: Activity },
+  { label: "API Shard Mesh", value: "v2.0-COMM", trend: "STABLE", color: "text-cyan-neon", icon: Server },
 ];
 
 const USERS = [
@@ -35,10 +35,10 @@ const USERS = [
 ];
 
 const GLOBAL_FEED = [
-  { user: "Alpha_Trader_99", type: "FILL", market: "AAPL-YES", val: "+$450.00", time: "16:04:12" },
-  { user: "Bravo_Strategic", type: "QUOTE", market: "BTC-80K", val: "PENDING", time: "16:03:55" },
-  { user: "Echo_Protocol", type: "CONFIRM", market: "NVDA-SPLIT", val: "+$1,200", time: "16:02:10" },
-  { user: "Delta_Fleet_5", type: "CANCEL", market: "TSLA-NO", val: "$0.00", time: "16:01:44" },
+  { user: "Alpha_Trader_99", type: "QUOTE_SENT", market: "NASDAQ100-UP", val: "EXECUTED", time: "16:04:12" },
+  { user: "Bravo_Strategic", type: "RFQ_RECEIVED", market: "BTC-80K-EOM", val: "OPEN", time: "16:03:55" },
+  { user: "Echo_Protocol", type: "CONFIRMED", market: "FED-RATE-SEP", val: "AWAITING", time: "16:02:10" },
+  { user: "Delta_Fleet_5", type: "CANCELLED", market: "TSLA-MAR26", val: "USER", time: "16:01:44" },
 ];
 
 export default function AdminDashboard() {
@@ -148,20 +148,20 @@ export default function AdminDashboard() {
               <div className="grid grid-cols-2 gap-8">
                 <div className="glass-card rounded-3xl border border-white/5 p-8 flex flex-col gap-8">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white/40 italic">System API Latency</h3>
+                    <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white/40 italic">Fleet Shard Load Distribution</h3>
                     <Layers size={14} className="text-white/20" />
                   </div>
                   <div className="h-32 flex items-end gap-2 px-2">
-                    {[34, 55, 45, 78, 90, 65, 45, 34, 23, 45, 67, 89].map((h, i) => (
-                      <div key={i} className="flex-1 bg-white/[0.03] rounded-t-lg relative group transition-all hover:bg-cyan-neon/40" style={{ height: `${h}%` }}>
-                        <div className="absolute inset-0 bg-cyan-neon opacity-0 group-hover:opacity-100 transition-opacity blur-[8px] rounded-t-lg" />
+                    {[34, 55, 45, 78, 20, 15, 45, 90, 85, 45, 67, 34].map((h, i) => (
+                      <div key={i} className="flex-1 bg-white/[0.03] rounded-t-lg relative group transition-all hover:bg-magenta-cyber/40" style={{ height: `${h}%` }}>
+                        <div className="absolute inset-0 bg-magenta-cyber opacity-0 group-hover:opacity-100 transition-opacity blur-[8px] rounded-t-lg" />
                       </div>
                     ))}
                   </div>
                   <div className="flex justify-between items-center text-[8px] font-mono text-white/20 uppercase tracking-[0.4em]">
-                    <span>12:00</span>
-                    <span className="text-cyan-neon/40 uppercase">Cluster Load: Normal</span>
-                    <span>00:00</span>
+                    <span>SHARD_01</span>
+                    <span className="text-magenta-cyber/40 uppercase">Cluster Mesh: Active</span>
+                    <span>SHARD_12</span>
                   </div>
                 </div>
 

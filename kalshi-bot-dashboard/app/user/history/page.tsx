@@ -18,12 +18,12 @@ import { Sidebar } from "@/app/components/Sidebar";
 import { DashboardHeader } from "@/app/components/DashboardHeader";
 
 const HISTORY_DATA = [
-  { id: "TX-9041", market: "AAPL-C250", type: "RFQ", side: "YES", qty: 450, price: 0.82, status: "FILLED", time: "16:10:45", pnl: "+$12.50" },
-  { id: "TX-9038", market: "FED-HIKE", type: "QUOTE", side: "NO", qty: 120, price: 0.12, status: "EXPIRED", time: "16:04:12", pnl: "$0.00" },
-  { id: "TX-9035", market: "BTC-80K", type: "RFQ", side: "YES", qty: 15, price: 0.68, status: "REJECTED", time: "15:58:22", pnl: "$0.00" },
-  { id: "TX-9032", market: "NVDA-SPLIT", type: "RFQ", side: "YES", qty: 200, price: 0.33, status: "FILLED", time: "15:45:01", pnl: "+$44.00" },
-  { id: "TX-9029", market: "TSLA-NO", type: "QUOTE", side: "NO", qty: 100, price: 0.45, status: "FILLED", time: "15:32:18", pnl: "-$5.20" },
-  { id: "TX-9026", market: "SPY-PUT", type: "RFQ", side: "YES", qty: 500, price: 0.15, status: "FILLED", time: "15:20:44", pnl: "+$12.00" },
+  { id: "TX-01H2J", market: "NASDAQ100-24MAR26-T18500", type: "RFQ", side: "YES", qty: 5000, price: 0.56, status: "EXECUTED", time: "16:10:45", pnl: "+$12.50" },
+  { id: "TX-01H2K", market: "BTC-USD-80K-EOM", type: "QUOTE", side: "NO", qty: 12000, price: 0.12, status: "EXPIRED", time: "16:04:12", pnl: "$0.00" },
+  { id: "TX-01H2L", market: "FED-RATE-HIKE-SEP", type: "RFQ", side: "YES", qty: 1500, price: 0.88, status: "CANCELLED", time: "15:58:22", pnl: "$0.00" },
+  { id: "TX-01H2M", market: "AAPL-24MAR26-C250", type: "RFQ", side: "YES", qty: 2000, price: 0.33, status: "EXECUTED", time: "15:45:01", pnl: "+$44.00" },
+  { id: "TX-01H2N", market: "TSLA-24MAR26-DOWN", type: "QUOTE", side: "NO", qty: 1000, price: 0.45, status: "EXECUTED", time: "15:32:18", pnl: "-$5.20" },
+  { id: "TX-01H2O", market: "SPY-24MAR26-P520", type: "RFQ", side: "YES", qty: 5000, price: 0.15, status: "EXECUTED", time: "15:20:44", pnl: "+$12.00" },
 ];
 
 export default function HistoryPage() {
@@ -34,7 +34,7 @@ export default function HistoryPage() {
       <main className="flex-1 relative overflow-y-auto h-screen scrollbar-hide">
         <DashboardHeader title="Trade Audit Log" />
         
-        <div className="p-8 space-y-8 max-w-7xl mx-auto">
+        <div className="p-10 space-y-10 max-w-7xl mx-auto">
           {/* Filtering Header */}
           <div className="glass-card p-6 rounded-[32px] border-white/5 flex items-center justify-between shadow-2xl">
             <div className="flex items-center gap-4 flex-1">
@@ -109,12 +109,12 @@ export default function HistoryPage() {
                       </td>
                       <td className="px-10 py-6 text-center">
                         <div className="flex items-center justify-center gap-2">
-                           {row.status === "FILLED" ? <CheckCircle2 size={12} className="text-chart-green" /> : 
-                            row.status === "REJECTED" ? <XCircle size={12} className="text-chart-red" /> : 
+                           {row.status === "EXECUTED" ? <CheckCircle2 size={12} className="text-chart-green" /> : 
+                            row.status === "CANCELLED" ? <XCircle size={12} className="text-chart-red" /> : 
                             <Clock size={12} className="text-white/20" />}
                            <span className={cn(
                              "text-[11px] font-black uppercase tracking-widest",
-                             row.status === "FILLED" ? "text-white" : "text-white/20"
+                             row.status === "EXECUTED" ? "text-white" : "text-white/20"
                            )}>{row.status}</span>
                         </div>
                       </td>

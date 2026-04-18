@@ -28,3 +28,7 @@ kalshi-bot/internal/auth/*.pem
 dist/
 coverage/
 tmp/
+
+
+
+*.md

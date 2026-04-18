@@ -9,6 +9,9 @@ import (
 	"rfqbot/internal/config"
 	"rfqbot/internal/kalshi"
 	"rfqbot/internal/pricing"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 )
 
 // Engine wires RFQ events to pricing and REST actions.
@@ -17,15 +20,21 @@ type Engine struct {
 	log    *slog.Logger
 	client *kalshi.Client
 	price  pricing.Engine
+	cache  *pricing.PriceCache
+	pool   *pgxpool.Pool
+	rdb    *redis.Client
 	quotes *quoteTracker
 }
 
-func NewEngine(cfg *config.Config, log *slog.Logger, client *kalshi.Client, pe pricing.Engine) *Engine {
+func NewEngine(cfg *config.Config, log *slog.Logger, client *kalshi.Client, pe pricing.Engine, pc *pricing.PriceCache, pool *pgxpool.Pool, rdb *redis.Client) *Engine {
 	return &Engine{
 		cfg:    cfg,
 		log:    log,
 		client: client,
 		price:  pe,
+		cache:  pc,
+		pool:   pool,
+		rdb:    rdb,
 		quotes: newQuoteTracker(),
 	}
 }
@@ -43,6 +52,8 @@ func (e *Engine) HandleWSMessage(ctx context.Context, payload []byte) {
 		e.onRFQCreated(ctx, raw)
 	case "quote_accepted":
 		e.onQuoteAccepted(ctx, raw)
+	case "orderbook_delta", "orderbook_snapshot":
+		e.cache.HandleDelta(payload)
 	case "quote_created", "quote_executed", "rfq_deleted":
 		e.log.Debug("ws event", "type", typ, "body", string(payload))
 	case "subscribed", "ok", "error":
@@ -84,13 +95,21 @@ func (e *Engine) onRFQCreated(ctx context.Context, raw map[string]any) {
 		"legs", len(rfq.MVESelectedLegs),
 	)
 
-	if e.cfg.DryRun || !e.cfg.QuoteEnabled {
+	// Always calculate price for visibility/logging
+	yes, no, err := e.price.Price(ctx, rfq)
+	if err != nil {
+		e.log.Warn("pricing error", "id", rfq.ID, "err", err)
 		return
 	}
 
-	yes, no, err := e.price.Price(ctx, rfq)
-	if err != nil {
-		e.log.Debug("skip quote", "rfq_id", id, "reason", err.Error())
+	e.log.Info("quote calculated",
+		"id", rfq.ID,
+		"yes", yes,
+		"no", no,
+		"dry_run", e.cfg.DryRun,
+	)
+
+	if e.cfg.DryRun || !e.cfg.QuoteEnabled {
 		return
 	}
 

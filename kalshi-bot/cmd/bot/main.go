@@ -10,8 +10,10 @@ import (
 	"rfqbot/internal/auth"
 	"rfqbot/internal/bot"
 	"rfqbot/internal/config"
+	"rfqbot/internal/db"
 	"rfqbot/internal/kalshi"
 	"rfqbot/internal/pricing"
+	"rfqbot/internal/redis"
 	"rfqbot/internal/ws"
 
 	"github.com/joho/godotenv"
@@ -35,14 +37,34 @@ func main() {
 		os.Exit(1)
 	}
 
-	pe, err := pricing.NewEngine(cfg)
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	// Connect to Infrastructure
+	pool, err := db.Connect(ctx, cfg.DBURL)
+	if err != nil {
+		log.Error("postgres", "err", err)
+		os.Exit(1)
+	}
+	defer pool.Close()
+
+	rdb, err := redis.Connect(ctx, cfg.RedisURL)
+	if err != nil {
+		log.Error("redis", "err", err)
+		os.Exit(1)
+	}
+	defer rdb.Close()
+
+	kc := kalshi.NewClient(cfg.RESTBase, signer)
+	pc := pricing.NewPriceCache()
+
+	pe, err := pricing.NewEngine(cfg, pc)
 	if err != nil {
 		log.Error("pricing", "err", err)
 		os.Exit(1)
 	}
 
-	kc := kalshi.NewClient(cfg.RESTBase, signer)
-	eng := bot.NewEngine(cfg, log, kc, pe)
+	eng := bot.NewEngine(cfg, log, kc, pe, pc, pool, rdb)
 
 	log.Info("rfqbot starting",
 		"rest", cfg.RESTBase,
@@ -52,10 +74,27 @@ func main() {
 		"strategy", cfg.Strategy,
 	)
 
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, cancel = signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	go ws.RunDialLoop(ctx, log, cfg.WebSocketURL, signer, eng.HandleWSMessage, cfg.ShardFactor, cfg.ShardKey)
+	// 1. Fetch Active Markets (needed for orderbook subscription)
+	tickers, err := kc.GetMarkets(ctx)
+	if err != nil {
+		log.Error("get markets", "err", err)
+		// Don't exit here, maybe we can still process RFQs even if initial pricing is blind
+	}
+	log.Info("active markets fetched", "count", len(tickers))
+
+	// 2. Communications Loop (RFQs)
+	go ws.RunDialLoop(ctx, log, cfg.WebSocketURL, signer, eng.HandleWSMessage, []string{"communications"}, nil, cfg.ShardFactor, cfg.ShardKey)
+
+	// 3. Orderbook Loop (Market Data)
+	if len(tickers) > 0 {
+		params := map[string]any{
+			"market_tickers": tickers,
+		}
+		go ws.RunDialLoop(ctx, log, cfg.WebSocketURL, signer, eng.HandleWSMessage, []string{"orderbook_delta"}, params, cfg.ShardFactor, cfg.ShardKey)
+	}
 
 	<-ctx.Done()
 	log.Info("shutdown")

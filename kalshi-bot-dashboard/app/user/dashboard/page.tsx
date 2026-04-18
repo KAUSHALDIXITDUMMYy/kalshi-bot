@@ -36,11 +36,44 @@ const POSITIONS = [
   { market: "BTC-USD-80K-EOM", side: "YES", qty: 15, avg: 0.68, pnl: "-$2.15", status: "ACTIVE" },
 ];
 
+const LIVE_RFQS = [
+  { 
+    id: "rfq_01H2J", 
+    market_ticker: "NASDAQ100-24MAR26-T18500", 
+    contracts_fp: 5000, // 50.00 contracts
+    target_cost: 0.56,
+    status: "open",
+    is_hvm: true,
+    legs: [
+      { ticker: "NAS-24MAR26-UP", side: "YES", value: 1.00 },
+      { ticker: "NAS-24MAR26-DOWN", side: "NO", value: 0.00 }
+    ]
+  },
+  { 
+    id: "rfq_01H2K", 
+    market_ticker: "BTC-USD-80K-EOM", 
+    contracts_fp: 15000, 
+    target_cost: 0.12,
+    status: "accepted",
+    is_hvm: false,
+    legs: []
+  },
+  { 
+    id: "rfq_01H2L", 
+    market_ticker: "FED-RATE-HIKE-SEP", 
+    contracts_fp: 12000, 
+    target_cost: 0.88,
+    status: "confirmed",
+    is_hvm: false,
+    legs: []
+  }
+];
+
 const LOGS = [
-  { time: "16:04:12", type: "RFQ", msg: "NVDA YES 0.44", status: "PENDING" },
-  { time: "16:03:55", type: "WS", msg: "COMMUNICATION_CHANNEL_STABLE", status: "OK" },
-  { time: "16:02:12", type: "QUOTE", msg: "AMZN YES 0.88", status: "SENT" },
-  { time: "16:01:44", type: "SYSTEM", msg: "ENGINE_IGNITED", status: "ACTIVE" },
+  { time: "16:04:12", type: "COMMUNICATIONS", msg: "RFQ_CREATED: NASDAQ100...", status: "OK" },
+  { time: "16:03:55", type: "SYSTEM", msg: "SHARD_SYNC_COMPLETE: SHARD_04", status: "OK" },
+  { time: "16:02:12", type: "QUOTE", msg: "QUOTE_ACCEPTED: BTC-USD...", status: "PENDING" },
+  { time: "16:01:44", type: "ENGINE", msg: "HVM_GATEWAY_ACTIVE", status: "ACTIVE" },
 ];
 
 export default function UserDashboard() {
@@ -108,41 +141,88 @@ export default function UserDashboard() {
             {/* Left Column: Data Stream & Manual Intervention */}
             <div className="col-span-8 flex flex-col gap-8">
               
-              {/* Manual Action Center */}
+              {/* RFQ & Quote Pipeline */}
               <motion.div 
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="glass-card rounded-3xl border border-white/5 overflow-hidden shadow-2xl relative"
+                className="glass-card rounded-3xl border border-white/5 overflow-hidden shadow-2xl"
               >
                 <div className="px-8 py-5 border-b border-white/5 bg-white/[0.01] flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <Terminal size={18} className="text-cyan-neon" />
-                    <h2 className="text-sm font-black uppercase tracking-tight text-white">Manual Intervention HUD</h2>
+                    <h2 className="text-sm font-black uppercase tracking-tight text-white">Live RFQ Pipeline</h2>
                   </div>
-                  <span className="text-[10px] font-black tracking-widest text-white/20 uppercase italic">Override Authority Enabled</span>
+                  <div className="flex items-center gap-2">
+                    <div className="bg-magenta-cyber/10 border border-magenta-cyber/20 px-3 py-1 rounded-lg">
+                      <span className="text-[9px] font-black text-magenta-cyber uppercase tracking-widest">HVM Active</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="p-8 grid grid-cols-2 gap-6">
-                  <div className="space-y-4">
-                    <h4 className="text-[9px] font-black uppercase tracking-widest text-white/30 px-1">RFQ Pipeline Actions</h4>
-                    <div className="grid grid-cols-2 gap-3">
-                      <button className="py-4 bg-white/[0.03] border border-white/5 hover:bg-magenta-cyber/10 hover:border-magenta-cyber/30 rounded-2xl text-[10px] font-black text-white/60 hover:text-magenta-cyber uppercase tracking-widest transition-all">
-                        Delete RFQ
-                      </button>
-                      <button className="py-4 bg-white/[0.03] border border-white/5 hover:bg-cyan-neon/10 hover:border-cyan-neon/30 rounded-2xl text-[10px] font-black text-white/60 hover:text-cyan-neon uppercase tracking-widest transition-all">
-                        Accept Quote
-                      </button>
-                    </div>
-                  </div>
-                  <div className="space-y-4">
-                    <h4 className="text-[9px] font-black uppercase tracking-widest text-white/30 px-1">Active Quote Actions</h4>
-                    <div className="grid grid-cols-2 gap-3">
-                      <button className="py-4 bg-white/[0.03] border border-white/5 hover:bg-magenta-cyber/10 hover:border-magenta-cyber/30 rounded-2xl text-[10px] font-black text-white/60 hover:text-magenta-cyber uppercase tracking-widest transition-all">
-                        Delete Quote
-                      </button>
-                      <button className="py-4 bg-white/[0.03] border border-white/5 hover:bg-cyan-neon/10 hover:border-cyan-neon/30 rounded-2xl text-[10px] font-black text-white/60 hover:text-cyan-neon uppercase tracking-widest transition-all">
-                        Confirm Quote
-                      </button>
-                    </div>
+                <div className="p-0">
+                  <div className="divide-y divide-white/5">
+                    {LIVE_RFQS.map((rfq, i) => (
+                      <div key={rfq.id} className="p-8 hover:bg-white/[0.01] transition-all group">
+                        <div className="flex items-center justify-between mb-6">
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-3">
+                              <span className="text-sm font-black text-white tracking-tight">{rfq.market_ticker}</span>
+                              {rfq.is_hvm && <Zap size={12} className="text-magenta-cyber" />}
+                            </div>
+                            <span className="text-[10px] font-mono text-white/20 uppercase tracking-widest">UID: {rfq.id}</span>
+                          </div>
+                          
+                          <div className="flex items-center gap-3">
+                            <div className={cn(
+                              "px-3 py-1 rounded-lg border text-[9px] font-black uppercase tracking-widest",
+                              rfq.status === "open" && "bg-cyan-neon/5 border-cyan-neon/20 text-cyan-neon",
+                              rfq.status === "accepted" && "bg-chart-green/5 border-chart-green/20 text-chart-green",
+                              rfq.status === "confirmed" && "bg-magenta-cyber/5 border-magenta-cyber/20 text-magenta-cyber"
+                            )}>
+                              {rfq.status}
+                            </div>
+                            <div className="flex flex-col items-end">
+                              <span className="text-xs font-black text-white/80">${(rfq.contracts_fp / 100).toFixed(2)} Target</span>
+                              <span className="text-[9px] font-black text-white/20 uppercase tracking-widest">Size: {rfq.contracts_fp / 100} Contracts</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {rfq.legs.length > 0 && (
+                          <div className="mb-6 grid grid-cols-2 gap-3">
+                            {rfq.legs.map((leg, li) => (
+                              <div key={li} className="bg-white/[0.02] border border-white/5 rounded-xl p-3 flex items-center justify-between">
+                                <span className="text-[9px] font-black text-white/40 uppercase tracking-tight truncate max-w-[120px]">{leg.ticker}</span>
+                                <span className={cn(
+                                  "text-[9px] font-black px-2 py-0.5 rounded",
+                                  leg.side === "YES" ? "text-cyan-neon bg-cyan-neon/10" : "text-magenta-cyber bg-magenta-cyber/10"
+                                )}>{leg.side}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        <div className="flex items-center gap-3">
+                          {rfq.status === "open" && (
+                            <button className="flex-1 py-3 bg-cyan-neon text-black rounded-xl text-[10px] font-black uppercase tracking-[0.2em] shadow-[0_0_15px_rgba(0,245,255,0.2)] hover:scale-[1.02] transition-all">
+                              Submit Quote
+                            </button>
+                          )}
+                          {rfq.status === "accepted" && (
+                            <button className="flex-1 py-3 bg-magenta-cyber text-white rounded-xl text-[10px] font-black uppercase tracking-[0.2em] shadow-[0_0_15px_rgba(255,0,128,0.2)] hover:scale-[1.02] transition-all">
+                              Confirm Trade (30s)
+                            </button>
+                          )}
+                          {rfq.status === "confirmed" && (
+                            <button className="flex-1 py-3 bg-white/[0.05] border border-white/10 text-white/40 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] cursor-not-allowed">
+                              Awaiting Execution (15s)
+                            </button>
+                          )}
+                          <button className="px-6 py-3 bg-white/[0.03] border border-white/5 text-white/20 hover:text-white/40 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all">
+                            Ignore
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </motion.div>

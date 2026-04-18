@@ -68,6 +68,14 @@ type CreateQuoteResponse struct {
 	ID string `json:"id"`
 }
 
+type Market struct {
+	Ticker string `json:"ticker"`
+}
+
+type GetMarketsResponse struct {
+	Markets []Market `json:"markets"`
+}
+
 func (c *Client) CreateQuote(ctx context.Context, req CreateQuoteRequest) (string, error) {
 	b, err := json.Marshal(req)
 	if err != nil {
@@ -101,4 +109,27 @@ func (c *Client) ConfirmQuote(ctx context.Context, quoteID string) error {
 		return fmt.Errorf("confirm quote: status %d: %s", resp.StatusCode, string(body))
 	}
 	return nil
+}
+
+func (c *Client) GetMarkets(ctx context.Context) ([]string, error) {
+	// status=open is usually what we want for RFQ market making
+	// 1000 is a safe upper bound for demo, but we should handle pagination for prod
+	resp, err := c.do(ctx, http.MethodGet, "/markets?status=open&limit=1000", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("get markets: status %d: %s", resp.StatusCode, string(body))
+	}
+	var out GetMarketsResponse
+	if err := json.Unmarshal(body, &out); err != nil {
+		return nil, err
+	}
+	tickers := make([]string, 0, len(out.Markets))
+	for _, m := range out.Markets {
+		tickers = append(tickers, m.Ticker)
+	}
+	return tickers, nil
 }

@@ -24,12 +24,14 @@ type Engine interface {
 	Price(ctx context.Context, r RFQInput) (yesBid, noBid string, err error)
 }
 
-func NewEngine(cfg *config.Config) (Engine, error) {
+func NewEngine(cfg *config.Config, pc *PriceCache) (Engine, error) {
 	switch cfg.Strategy {
 	case "noop":
 		return noopEngine{}, nil
 	case "fixed":
 		return fixedEngine{yes: cfg.FixedYesBid, no: cfg.FixedNoBid}, nil
+	case "market":
+		return NewMarketEngine(cfg, pc), nil
 	default:
 		return nil, fmt.Errorf("unknown KALSHI_STRATEGY %q", cfg.Strategy)
 	}
