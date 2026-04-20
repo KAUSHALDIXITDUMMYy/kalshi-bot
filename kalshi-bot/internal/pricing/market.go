@@ -68,17 +68,36 @@ func (e *marketEngine) Price(ctx context.Context, r RFQInput) (string, string, e
 	// 2. The "Market Price" in cents
 	marketPriceCents := marketBuyProb * 100.0
 
-	// 3. Apply the VIG penalties as requested in implementation_requirements.md
-	// "Use a massive switch len(legs) statement to deduct the VIG penalties"
-	vig := e.calculateVig(len(r.MVESelectedLegs))
-	
-	quotedYesPriceCents := int(marketPriceCents) - vig
+	// 3. Correlation Detection (Task 3.3)
+	// Check if multiple legs share the same Event Ticker (Same Game Parlay)
+	isCorrelated := false
+	eventCounts := make(map[string]int)
+	for _, leg := range r.MVESelectedLegs {
+		event, _ := leg["event_ticker"].(string)
+		if event != "" {
+			eventCounts[event]++
+			if eventCounts[event] > 1 {
+				isCorrelated = true
+				break
+			}
+		}
+	}
 
-	// 4. Safety Guard: Never quote below 2 cents (Per implementation_requirements.md 3.B.4)
+	// 4. Apply the VIG penalties
+	vig := float64(e.calculateVig(len(r.MVESelectedLegs)))
+	
+	// Apply 50% Vig Penalty if correlated (Per 1.md Section 4.1)
+	if isCorrelated {
+		vig = vig * 1.5
+	}
+	
+	quotedYesPriceCents := int(marketPriceCents) - int(vig)
+
+	// 5. Safety Guard: Never quote below 2 cents (Per implementation_requirements.md 3.B.4)
 	if quotedYesPriceCents < 2 {
 		quotedYesPriceCents = 2
 	}
-	// 5. Safety Guard: Never quote above 98 cents (Kalshi limits)
+	// 6. Safety Guard: Never quote above 98 cents (Kalshi limits)
 	if quotedYesPriceCents > 98 {
 		quotedYesPriceCents = 98
 	}

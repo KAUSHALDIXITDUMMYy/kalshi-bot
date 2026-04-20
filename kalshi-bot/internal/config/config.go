@@ -25,6 +25,11 @@ type Config struct {
 	// Infrastructure
 	DBURL    string
 	RedisURL string
+
+	// Risk Limits
+	MaxLegExposureCents   int64
+	MaxSportExposureCents int64
+	MaxTotalExposureCents int64
 }
 
 func FromEnv() (*Config, error) {
@@ -38,6 +43,9 @@ func FromEnv() (*Config, error) {
 		FixedNoBid:     strings.TrimSpace(os.Getenv("KALSHI_FIXED_NO_BID")),
 		DBURL:          strings.TrimSpace(os.Getenv("DATABASE_URL")),
 		RedisURL:       strings.TrimSpace(os.Getenv("REDIS_URL")),
+		MaxLegExposureCents:   int64(getenvInt("RISK_MAX_LEG_EXPOSURE", 30000)),   // $300
+		MaxSportExposureCents: int64(getenvInt("RISK_MAX_SPORT_EXPOSURE", 150000)), // $1,500
+		MaxTotalExposureCents: int64(getenvInt("RISK_MAX_TOTAL_EXPOSURE", 500000)), // $5,000
 	}
 
 	if c.APIKeyID == "" {

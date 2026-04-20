@@ -64,7 +64,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	eng := bot.NewEngine(cfg, log, kc, pe, pc, pool, rdb)
+	dbLog := db.NewLogger(pool)
+	risk := bot.NewRiskEngine(cfg, log, rdb)
+	safety := bot.NewSafetyMonitor(log, rdb)
+	eng := bot.NewEngine(cfg, log, kc, pe, pc, pool, rdb, dbLog, risk, safety)
 
 	log.Info("rfqbot starting",
 		"rest", cfg.RESTBase,
