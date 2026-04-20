@@ -80,6 +80,12 @@ func main() {
 	ctx, cancel = signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
+	// 0. Start Background Roster Sync
+	if !cfg.DryRun {
+		// Uses BALLDONTLIE_API_KEY if present in environment, else attempts without it
+		pricing.StartDailyRosterSync(os.Getenv("BALLDONTLIE_API_KEY"))
+	}
+
 	// 1. Fetch Active Markets (needed for orderbook subscription)
 	tickers, err := kc.GetMarkets(ctx)
 	if err != nil {

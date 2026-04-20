@@ -68,30 +68,21 @@ func (e *marketEngine) Price(ctx context.Context, r RFQInput) (string, string, e
 	// 2. The "Market Price" in cents
 	marketPriceCents := marketBuyProb * 100.0
 
-	// 3. Correlation Detection (Task 3.3)
-	// Check if multiple legs share the same Event Ticker (Same Game Parlay)
-	isCorrelated := false
-	eventCounts := make(map[string]int)
-	for _, leg := range r.MVESelectedLegs {
-		event, _ := leg["event_ticker"].(string)
-		if event != "" {
-			eventCounts[event]++
-			if eventCounts[event] > 1 {
-				isCorrelated = true
-				break
-			}
-		}
+	// 3. Correlation Detection Engine
+	correlation := DetectCorrelation(r.MVESelectedLegs)
+	
+	if correlation.ShouldDecline {
+		return "", "", fmt.Errorf("RFQ declined due to correlation policy: %s", correlation.Reason)
 	}
 
-	// 4. Apply the VIG penalties
-	vig := float64(e.calculateVig(len(r.MVESelectedLegs)))
+	// 4. Apply the VIG penalties depending on risk
+	baseVig := float64(e.calculateVig(len(r.MVESelectedLegs)))
 	
-	// Apply 50% Vig Penalty if correlated (Per 1.md Section 4.1)
-	if isCorrelated {
-		vig = vig * 1.5
-	}
+	// correlation penalty formula from 3.md Line 783
+	corrAdj := marketPriceCents * (correlation.VigMultiplier - 1.0) * 0.5
 	
-	quotedYesPriceCents := int(marketPriceCents) - int(vig)
+	totalDeduction := baseVig + corrAdj
+	quotedYesPriceCents := int(marketPriceCents) - int(totalDeduction)
 
 	// 5. Safety Guard: Never quote below 2 cents (Per implementation_requirements.md 3.B.4)
 	if quotedYesPriceCents < 2 {

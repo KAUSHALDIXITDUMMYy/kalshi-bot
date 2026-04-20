@@ -14,6 +14,16 @@ go run ./cmd/bot
 
 Default is **dry run**: RFQs are logged; no quotes are sent. To send quotes on demo, set `KALSHI_DRY_RUN=false`, `KALSHI_QUOTE_ENABLED=true`, and `KALSHI_STRATEGY=fixed` with `KALSHI_FIXED_YES_BID` / `KALSHI_FIXED_NO_BID` (valid dollar strings for that market).
 
+## Correlation Engine
+
+The bot includes an advanced `Correlation Engine` that dynamically penalizes highly-correlated parlays (e.g., Same Game or Same Team parlays).
+To safely map players to teams, the bot runs a background caching worker.
+
+**Required:** You must obtain a free API key from [balldontlie.io](https://www.balldontlie.io/) and add it to your `.env` file or system environment variables:
+`BALLDONTLIE_API_KEY=your_key`
+
+The bot runs a background fetch daily at 3:00 AM to keep the internal memory map updated. If the key is missing, the sync will fail but the bot will safely fall back to its internal mock dataset.
+
 ## Build
 
 ```bash
