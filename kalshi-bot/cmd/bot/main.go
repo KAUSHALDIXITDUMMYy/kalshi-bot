@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -11,6 +12,7 @@ import (
 	"rfqbot/internal/bot"
 	"rfqbot/internal/config"
 	"rfqbot/internal/db"
+	"rfqbot/internal/health"
 	"rfqbot/internal/kalshi"
 	"rfqbot/internal/pricing"
 	"rfqbot/internal/redis"
@@ -77,14 +79,25 @@ func main() {
 		"strategy", cfg.Strategy,
 	)
 
-	ctx, cancel = signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
+	// Start Health Check API
+	healthSrv := health.NewServer(rdb)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", healthSrv.HandleHealth)
+	healthPort := os.Getenv("HEALTH_PORT")
+	if healthPort == "" {
+		healthPort = "8080"
+	}
+	go func() {
+		log.Info("Health API listening", "port", healthPort)
+		if err := http.ListenAndServe(":"+healthPort, mux); err != nil {
+			log.Error("health server failed", "err", err)
+		}
+	}()
 
 	// 0. Start Background Roster Sync
-	if !cfg.DryRun {
-		// Uses BALLDONTLIE_API_KEY if present in environment, else attempts without it
-		pricing.StartDailyRosterSync(os.Getenv("BALLDONTLIE_API_KEY"))
-	}
+	// Run even in DryRun so that logs and pricing logic are accurate
+	// Uses BALLDONTLIE_API_KEY if present in environment, else attempts without it
+	pricing.StartDailyRosterSync(os.Getenv("BALLDONTLIE_API_KEY"))
 
 	// 1. Fetch Active Markets (needed for orderbook subscription)
 	tickers, err := kc.GetMarkets(ctx)
@@ -102,7 +115,8 @@ func main() {
 		params := map[string]any{
 			"market_tickers": tickers,
 		}
-		go ws.RunDialLoop(ctx, log, cfg.WebSocketURL, signer, eng.HandleWSMessage, []string{"orderbook_delta"}, params, cfg.ShardFactor, cfg.ShardKey)
+		// orderbook_delta does not support sharding, pass 0, 0
+		go ws.RunDialLoop(ctx, log, cfg.WebSocketURL, signer, eng.HandleWSMessage, []string{"orderbook_delta"}, params, 0, 0)
 	}
 
 	<-ctx.Done()
