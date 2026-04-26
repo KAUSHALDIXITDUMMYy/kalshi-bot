@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"math"
 	"rfqbot/internal/config"
 	"rfqbot/internal/db"
 	"rfqbot/internal/kalshi"
@@ -169,8 +170,11 @@ func (e *Engine) onRFQCreated(ctx context.Context, rawMsg json.RawMessage) {
 		}
 
 		contracts := parseFloat(rfq.ContractsFP)
-		yesCents := int64(parseFloat(yes) * 100)
-		payoutRiskCents := int64(100-yesCents) * int64(contracts)
+		yesCents := int64(math.Round(parseFloat(yes) * 100))
+		payoutRiskCents := (100 - yesCents) * int64(contracts)
+		if payoutRiskCents < 0 {
+			payoutRiskCents = 0
+		}
 
 		allowed, reason := e.risk.CheckLimits(ctx, sport, tickers, payoutRiskCents)
 		if !allowed {
@@ -296,8 +300,11 @@ func (e *Engine) onQuoteAccepted(ctx context.Context, rawMsg json.RawMessage) {
 			e.db.UpdateQuoteStatus(context.Background(), qid, "ACCEPTED", side)
 
 			contracts := parseFloat(msg.ContractsAcceptedFP)
-			yesCents := int64(parseFloat(msg.YesBidDollars) * 100)
+			yesCents := int64(math.Round(parseFloat(msg.YesBidDollars) * 100))
 			payoutRiskCents := (100 - yesCents) * int64(contracts)
+			if payoutRiskCents < 0 {
+				payoutRiskCents = 0
+			}
 
 			// Determine sport and legs from tracked RFQ
 			sport := "UNKNOWN"
@@ -337,7 +344,8 @@ func (e *Engine) onQuoteAccepted(ctx context.Context, rawMsg json.RawMessage) {
 		}()
 	}
 
-	if e.cfg.ConfirmParallel {
+	isHVM := msg.IsHVM || (ok && rfq.IsHVM)
+	if e.cfg.ConfirmParallel && !isHVM {
 		go confirm()
 	} else {
 		confirm()

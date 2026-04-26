@@ -127,25 +127,44 @@ func (c *Client) ConfirmQuote(ctx context.Context, quoteID string) error {
 }
 
 func (c *Client) GetMarkets(ctx context.Context) ([]string, error) {
-	// status=open is usually what we want for RFQ market making
-	// 1000 is a safe upper bound for demo, but we should handle pagination for prod
-	resp, err := c.do(ctx, http.MethodGet, "/markets?status=open&limit=1000", nil)
-	if err != nil {
-		return nil, err
+	var tickers []string
+	cursor := ""
+
+	for {
+		url := "/markets?status=open&limit=1000"
+		if cursor != "" {
+			url += "&cursor=" + cursor
+		}
+
+		resp, err := c.do(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("get markets: status %d: %s", resp.StatusCode, string(body))
+		}
+
+		var out struct {
+			Markets []Market `json:"markets"`
+			Cursor  string   `json:"cursor"`
+		}
+		if err := json.Unmarshal(body, &out); err != nil {
+			return nil, err
+		}
+
+		for _, m := range out.Markets {
+			tickers = append(tickers, m.Ticker)
+		}
+
+		if out.Cursor == "" || len(out.Markets) == 0 {
+			break
+		}
+		cursor = out.Cursor
 	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("get markets: status %d: %s", resp.StatusCode, string(body))
-	}
-	var out GetMarketsResponse
-	if err := json.Unmarshal(body, &out); err != nil {
-		return nil, err
-	}
-	tickers := make([]string, 0, len(out.Markets))
-	for _, m := range out.Markets {
-		tickers = append(tickers, m.Ticker)
-	}
+
 	return tickers, nil
 }
 

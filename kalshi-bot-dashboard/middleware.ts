@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export function proxy(request: NextRequest) {
+export function middleware(request: NextRequest) {
   const token = request.cookies.get('auth_token');
   const { pathname } = request.nextUrl;
 
@@ -11,7 +11,7 @@ export function proxy(request: NextRequest) {
       if (pathname.startsWith('/api/')) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
       }
-      return NextResponse.redirect(new URL('/', request.url));
+      return NextResponse.redirect(new URL('/auth/login', request.url));
     }
   }
 
@@ -24,8 +24,6 @@ export function proxy(request: NextRequest) {
 
   return NextResponse.next();
 }
-
-export default proxy;
 
 export const config = {
   matcher: ['/dashboard/:path*', '/api/bot/:path*', '/', '/auth/login'],
