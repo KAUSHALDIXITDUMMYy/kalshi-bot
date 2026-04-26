@@ -269,7 +269,7 @@ func (s *Server) HandleAudit(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var logs []map[string]any
+	logs := make([]map[string]any, 0)
 	for rows.Next() {
 		var qid, qrid, sport, side string
 		var contracts, cost, payout int64

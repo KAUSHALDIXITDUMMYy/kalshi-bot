@@ -276,7 +276,7 @@ function UnifiedDashboardInner() {
                          <Activity size={14} className="text-cyan-neon" />
                          Execution Ledger
                       </h2>
-                      <span className="text-[9px] font-mono text-white/40">{auditLogs.length} Records Detected</span>
+                      <span className="text-[9px] font-mono text-white/40">{(auditLogs?.length || 0)} Records Detected</span>
                     </div>
                     <div className="overflow-y-auto flex-1 font-mono text-[10px]">
                       <table className="w-full text-left">
@@ -289,7 +289,8 @@ function UnifiedDashboardInner() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-white/5">
-                          {auditLogs.map((log, i) => (
+                          {auditLogs && auditLogs.length > 0 ? (
+                            auditLogs.map((log, i) => (
                             <tr key={i} className="hover:bg-white/[0.01] transition-colors group">
                               <td className="px-4 py-3 text-white/40 group-hover:text-white/60">{new Date(log.confirmed_at).toLocaleTimeString()}</td>
                               <td className="px-4 py-3 text-white/80 font-black tracking-tight">{log.sport}</td>
@@ -301,8 +302,9 @@ function UnifiedDashboardInner() {
                               </td>
                               <td className="px-4 py-3 text-right text-cyan-neon font-black italic">{formatCurrency(log.cost_cents)}</td>
                             </tr>
-                          ))}
-                          {auditLogs.length === 0 && (
+                          ))
+                          ) : null}
+                          {(auditLogs?.length || 0) === 0 && (
                             <tr>
                               <td colSpan={4} className="px-4 py-20 text-center text-white/10 italic">
                                  <div className="flex flex-col items-center gap-2 opacity-50">

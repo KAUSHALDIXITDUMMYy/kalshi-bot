@@ -37,10 +37,11 @@ CREATE TABLE quote_log (
 CREATE TABLE fill_log (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     quote_id UUID NOT NULL REFERENCES quote_log(quote_id),
+    quote_req_id UUID NOT NULL, -- Back-reference for full traceability
     filled_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     sport TEXT NOT NULL,
     contracts_fp DECIMAL(10,2) NOT NULL,
-    accepted_side CHAR(1) NOT NULL,
+    accepted_side TEXT NOT NULL, -- 'YES' or 'NO'
     cost_cents INTEGER NOT NULL, -- What buyer paid
     max_payout_cents INTEGER NOT NULL, -- Our max liability
     yes_price_cents INTEGER NOT NULL,
@@ -54,6 +55,7 @@ CREATE TABLE fill_log (
 
 CREATE INDEX idx_fill_sport ON fill_log(sport, filled_at DESC);
 CREATE INDEX idx_fill_settled ON fill_log(settled, filled_at DESC);
+CREATE INDEX idx_fill_quote_req ON fill_log(quote_req_id);
 
 -- DAILY SUMMARY
 CREATE TABLE daily_pnl (
