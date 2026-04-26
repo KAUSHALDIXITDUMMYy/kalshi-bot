@@ -2,11 +2,41 @@
 
 import { motion } from "framer-motion";
 import { useState } from "react";
-import { Lock, Mail, ArrowRight, UserPlus, LogIn, ChevronRight } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Lock, Mail, ArrowRight, LogIn, ChevronRight, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
-  const [isLogin, setIsLogin] = useState(true);
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        router.push("/dashboard");
+      } else {
+        setError(data.error || "Authentication failed");
+      }
+    } catch (err) {
+      setError("Connection error. Is the server running?");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen grid place-items-center bg-[#08080A] relative overflow-hidden font-display p-6">
@@ -20,111 +50,92 @@ export default function LoginPage() {
         transition={{ duration: 0.5, ease: "easeOut" }}
         className="relative w-full max-w-[440px] z-10"
       >
-        {/* Card Frame */}
-        <div className="glass-card rounded-2xl border border-white/5 shadow-2xl overflow-hidden p-8 sm:p-10 relative">
-          {/* Header */}
-          <div className="space-y-3 mb-10 text-center relative">
-            <div className="w-12 h-12 bg-cyan-neon/10 border border-cyan-neon/30 rounded-xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
-              {isLogin ? <LogIn className="text-cyan-neon" size={24} /> : <UserPlus className="text-cyan-neon" size={24} />}
+        <div className="glass-card rounded-[40px] border border-white/5 shadow-2xl overflow-hidden p-8 sm:p-12 relative bg-white/[0.01]">
+          <div className="space-y-3 mb-12 text-center">
+            <div className="w-16 h-16 bg-cyan-neon/10 border border-cyan-neon/30 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-[0_0_20px_rgba(0,245,255,0.2)]">
+              <LogIn className="text-cyan-neon" size={28} />
             </div>
-            <motion.h1 
-              key={isLogin ? "login" : "signup"}
-              initial={{ opacity: 0, y: 5 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="text-3xl font-bold tracking-tight text-white"
-            >
-              {isLogin ? "Kalshi Terminal" : "Initialize Access"}
-            </motion.h1>
-            <p className="text-neutral-400 font-medium text-sm">
-              {isLogin ? "Secure node connection required" : "Create your operator credentials"}
+            <h1 className="text-3xl font-black tracking-tighter text-white uppercase italic">
+              Kalshi <span className="text-cyan-neon">Cmd</span>
+            </h1>
+            <p className="text-neutral-500 font-bold text-[10px] uppercase tracking-[0.3em] italic">
+              Administrative Authorization
             </p>
           </div>
 
-          {/* Form */}
-          <form className="space-y-5" onSubmit={(e) => e.preventDefault()}>
-            {!isLogin && (
+          <form className="space-y-6" onSubmit={handleLogin}>
+            {error && (
               <motion.div 
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                className="space-y-2 overflow-hidden"
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="p-4 bg-magenta-cyber/10 border border-magenta-cyber/20 rounded-2xl text-magenta-cyber text-[10px] font-black uppercase tracking-widest text-center"
               >
-                <div className="relative group">
-                  <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-white/20 group-focus-within:text-cyan-neon transition-colors">
-                    <LogIn size={18} />
-                  </div>
-                  <input 
-                    type="text" 
-                    placeholder="Operator Name"
-                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-3.5 pl-12 pr-4 text-white placeholder:text-white/20 focus:outline-none focus:border-cyan-neon/50 focus:ring-1 focus:ring-cyan-neon/20 transition-all font-mono text-sm uppercase tracking-wider"
-                  />
-                </div>
+                {error}
               </motion.div>
             )}
 
             <div className="space-y-2">
               <div className="relative group">
-                <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-white/20 group-focus-within:text-cyan-neon transition-colors">
+                <div className="absolute inset-y-0 left-5 flex items-center pointer-events-none text-white/20 group-focus-within:text-cyan-neon transition-colors">
                   <Mail size={18} />
                 </div>
                 <input 
                   type="email" 
-                  placeholder="Operator Email"
-                  className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-3.5 pl-12 pr-4 text-white placeholder:text-white/20 focus:outline-none focus:border-cyan-neon/50 focus:ring-1 focus:ring-cyan-neon/20 transition-all font-mono text-sm"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="OPERATOR EMAIL"
+                  required
+                  className="w-full bg-white/[0.03] border border-white/10 rounded-2xl py-4 pl-14 pr-6 text-white placeholder:text-white/20 focus:outline-none focus:border-cyan-neon/50 focus:ring-1 focus:ring-cyan-neon/20 transition-all font-mono text-xs uppercase tracking-widest"
                 />
               </div>
             </div>
 
             <div className="space-y-2">
               <div className="relative group">
-                <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-white/20 group-focus-within:text-cyan-neon transition-colors">
+                <div className="absolute inset-y-0 left-5 flex items-center pointer-events-none text-white/20 group-focus-within:text-cyan-neon transition-colors">
                   <Lock size={18} />
                 </div>
                 <input 
                   type="password" 
-                  placeholder="Access Code"
-                  className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-3.5 pl-12 pr-4 text-white placeholder:text-white/20 focus:outline-none focus:border-cyan-neon/50 focus:ring-1 focus:ring-cyan-neon/20 transition-all font-mono text-sm"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="ACCESS CODE"
+                  required
+                  className="w-full bg-white/[0.03] border border-white/10 rounded-2xl py-4 pl-14 pr-6 text-white placeholder:text-white/20 focus:outline-none focus:border-cyan-neon/50 focus:ring-1 focus:ring-cyan-neon/20 transition-all font-mono text-xs uppercase tracking-widest"
                 />
               </div>
             </div>
 
             <button 
               type="submit" 
-              className="w-full cyber-button flex items-center justify-center gap-2 text-background font-bold uppercase tracking-widest text-sm rounded-xl py-4 group active:scale-[0.98]"
+              disabled={loading}
+              className="w-full cyber-button flex items-center justify-center gap-3 text-background font-black uppercase tracking-[0.3em] text-xs rounded-2xl py-5 group active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none transition-all shadow-[0_0_20px_rgba(0,245,255,0.2)]"
             >
-              {isLogin ? "Authorize Session" : "Deploy Credentials"}
-              <ArrowRight className="group-hover:translate-x-1 transition-transform" size={18} />
+              {loading ? (
+                <Loader2 className="animate-spin" size={20} />
+              ) : (
+                <>
+                  Establish Connection
+                  <ArrowRight className="group-hover:translate-x-1 transition-transform" size={18} />
+                </>
+              )}
             </button>
           </form>
 
-          {/* Toggle */}
-          <div className="mt-10 pt-8 border-t border-white/5 flex flex-col gap-4 text-center">
-            <button 
-              onClick={() => setIsLogin(!isLogin)}
-              className="text-white/60 hover:text-cyan-neon transition-colors text-xs uppercase tracking-widest flex items-center justify-center gap-1.5 font-bold"
-            >
-              {isLogin ? "Need operator access? Request now" : "Back to terminal authorization"}
-              <ChevronRight size={14} />
-            </button>
-            
-            {isLogin && (
-              <button className="text-white/30 hover:text-white/50 transition-colors text-xs font-mono uppercase">
-                Lost access code? Init Reset
-              </button>
-            )}
+          <div className="mt-12 pt-8 border-t border-white/5 text-center">
+            <p className="text-[9px] font-black text-white/10 uppercase tracking-[0.4em] leading-relaxed italic">
+              Secure administrative access restricted to verified cluster operators.
+            </p>
           </div>
         </div>
 
-        {/* Status Decoration */}
-        <div className="mt-8 flex items-center justify-between text-[10px] font-mono text-white/20 uppercase tracking-[0.2em] px-2">
+        {/* Status Footer */}
+        <div className="mt-8 flex items-center justify-between text-[9px] font-mono text-white/10 uppercase tracking-[0.3em] px-4 italic">
           <div className="flex items-center gap-2">
-            <span className="w-1.5 h-1.5 bg-cyan-neon rounded-full animate-pulse shadow-[0_0_8px_rgba(0,245,255,0.8)]" />
-            System Secure
+            <span className="w-1.5 h-1.5 bg-cyan-neon rounded-full animate-pulse shadow-[0_0_8px_#00F5FF]" />
+            Node Secure
           </div>
-          <div>v2.4.0-Alpha</div>
-          <div className="flex items-center gap-2">
-            Node: US-EAST-1
-            <span className="w-1.5 h-1.5 bg-white/20 rounded-full" />
-          </div>
+          <div>v2.4-SECURE</div>
         </div>
       </motion.div>
     </div>

@@ -16,6 +16,7 @@ type SafetyMonitor struct {
 	mu            sync.Mutex
 	errorCount    int
 	lastErrorTime time.Time
+	lastLatencyMS float64
 }
 
 func NewSafetyMonitor(log *slog.Logger, rdb *redis.Client) *SafetyMonitor {
@@ -49,6 +50,10 @@ func (s *SafetyMonitor) RecordError(ctx context.Context, err error) {
 
 // RecordLatency tracks pricing speed.
 func (s *SafetyMonitor) RecordLatency(ctx context.Context, latencyMS float64) {
+	s.mu.Lock()
+	s.lastLatencyMS = latencyMS
+	s.mu.Unlock()
+
 	if latencyMS > 500 {
 		s.log.Warn("safety: high latency detected", "latency_ms", latencyMS)
 		// If it's > 1.0s, halt immediately (as per 4.md Section 4.2)
@@ -72,8 +77,8 @@ func (s *SafetyMonitor) TriggerHalt(ctx context.Context, reason string) {
 	s.rdb.Set(ctx, "safety:last_halt_reason", reason, 24*time.Hour)
 }
 
-func (s *SafetyMonitor) GetStatus() (int, time.Time) {
+func (s *SafetyMonitor) GetStatus() (int, time.Time, float64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.errorCount, s.lastErrorTime
+	return s.errorCount, s.lastErrorTime, s.lastLatencyMS
 }

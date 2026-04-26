@@ -60,15 +60,14 @@ func main() {
 
 	kc := kalshi.NewClient(cfg.RESTBase, signer)
 	pc := pricing.NewPriceCache()
-
-	pe, err := pricing.NewEngine(cfg, pc)
+	risk := bot.NewRiskEngine(cfg, log, rdb)
+	pe, err := pricing.NewEngine(cfg, pc, risk)
 	if err != nil {
 		log.Error("pricing", "err", err)
 		os.Exit(1)
 	}
 
 	dbLog := db.NewLogger(pool)
-	risk := bot.NewRiskEngine(cfg, log, rdb)
 	safety := bot.NewSafetyMonitor(log, rdb)
 	eng := bot.NewEngine(cfg, log, kc, pe, pc, pool, rdb, dbLog, risk, safety)
 	eng.StartBackgroundCleanup(ctx)
@@ -88,15 +87,17 @@ func main() {
 	)
 
 	// Start Health Check API
-	healthSrv := health.NewServer(rdb, pool, eng, safety)
+	healthSrv := health.NewServer(rdb, pool, dbLog, eng, safety, os.Getenv("INTERNAL_SHARED_SECRET"))
 	mux := http.NewServeMux()
-	mux.HandleFunc("/health", healthSrv.HandleHealth)
+	mux.HandleFunc("/health", healthSrv.WithAuth(healthSrv.HandleHealth))
+	mux.HandleFunc("/config", healthSrv.WithAuth(healthSrv.HandleConfig))
+	mux.HandleFunc("/audit", healthSrv.WithAuth(healthSrv.HandleAudit))
 	healthPort := os.Getenv("HEALTH_PORT")
 	if healthPort == "" {
 		healthPort = "8080"
 	}
 	go func() {
-		log.Info("Health API listening", "port", healthPort)
+		log.Info("Health API listening (SECURED)", "port", healthPort)
 		if err := http.ListenAndServe(":"+healthPort, mux); err != nil {
 			log.Error("health server failed", "err", err)
 		}

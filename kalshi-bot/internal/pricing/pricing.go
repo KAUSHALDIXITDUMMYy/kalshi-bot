@@ -31,14 +31,19 @@ type Engine interface {
 	Price(ctx context.Context, r RFQInput) (yesBid, noBid string, err error)
 }
 
-func NewEngine(cfg *config.Config, pc *PriceCache) (Engine, error) {
+// VigProvider abstraction to allow fetching dynamic Vig from Redis.
+type VigProvider interface {
+	GetVig(ctx context.Context, legCount int) int
+}
+
+func NewEngine(cfg *config.Config, pc *PriceCache, vig VigProvider) (Engine, error) {
 	switch cfg.Strategy {
 	case "noop":
 		return noopEngine{}, nil
 	case "fixed":
 		return fixedEngine{yes: cfg.FixedYesBid, no: cfg.FixedNoBid}, nil
 	case "market":
-		return NewMarketEngine(cfg, pc), nil
+		return NewMarketEngine(cfg, pc, vig), nil
 	default:
 		return nil, fmt.Errorf("unknown KALSHI_STRATEGY %q", cfg.Strategy)
 	}

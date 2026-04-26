@@ -36,15 +36,30 @@ func (re *RiskEngine) CheckLimits(ctx context.Context, sport string, tickers []s
 	// 2. Sport-level limit
 	sportKey := fmt.Sprintf("exposure:sport:%s", sport)
 	sportExp, _ := re.rdb.Get(ctx, sportKey).Int64()
-	if sportExp+payoutRiskCents > re.cfg.MaxSportExposureCents {
+	
+	// Fetch limit from Redis, fallback to config
+	sportLimitStr, _ := re.rdb.Get(ctx, fmt.Sprintf("config:limit:sport:%s", sport)).Result()
+	sportLimit := re.cfg.MaxSportExposureCents
+	if sportLimitStr != "" {
+		sportLimit = getInt64(sportLimitStr)
+	}
+
+	if sportExp+payoutRiskCents > sportLimit {
 		return false, fmt.Sprintf("sport_exposure_limit:%s", sport)
 	}
 
 	// 3. Leg-level limits
+	// Fetch leg limit from Redis, fallback to config
+	legLimitStr, _ := re.rdb.Get(ctx, "config:limit:leg").Result()
+	legLimit := re.cfg.MaxLegExposureCents
+	if legLimitStr != "" {
+		legLimit = getInt64(legLimitStr)
+	}
+
 	for _, ticker := range tickers {
 		legKey := fmt.Sprintf("exposure:leg:%s", ticker)
 		legExp, _ := re.rdb.Get(ctx, legKey).Int64()
-		if legExp+payoutRiskCents > re.cfg.MaxLegExposureCents {
+		if legExp+payoutRiskCents > legLimit {
 			return false, fmt.Sprintf("leg_exposure_limit:%s", ticker)
 		}
 
@@ -57,11 +72,38 @@ func (re *RiskEngine) CheckLimits(ctx context.Context, sport string, tickers []s
 
 	// 4. Total Daily Limit
 	totalExp, _ := re.rdb.Get(ctx, "exposure:daily:total").Int64()
-	if totalExp+payoutRiskCents > re.cfg.MaxTotalExposureCents {
+	dailyLimitStr, _ := re.rdb.Get(ctx, "config:limit:daily").Result()
+	dailyLimit := re.cfg.MaxTotalExposureCents
+	if dailyLimitStr != "" {
+		dailyLimit = getInt64(dailyLimitStr)
+	}
+
+	if totalExp+payoutRiskCents > dailyLimit {
 		return false, "total_exposure_limit"
 	}
 
 	return true, ""
+}
+
+// GetVig implements pricing.VigProvider
+func (re *RiskEngine) GetVig(ctx context.Context, legCount int) int {
+	key := fmt.Sprintf("config:vig:leg:%d", legCount)
+	val, err := re.rdb.Get(ctx, key).Int64()
+	if err == nil {
+		return int(val)
+	}
+
+	// Fallback to defaults from implementation_requirements.md
+	switch legCount {
+	case 1:
+		return 1
+	case 2:
+		return 3
+	case 3:
+		return 5
+	default:
+		return 7
+	}
 }
 
 // RecordFill atomically increments exposure for a filled trade.

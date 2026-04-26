@@ -11,12 +11,14 @@ import (
 type marketEngine struct {
 	cfg   *config.Config
 	cache *PriceCache
+	vig   VigProvider
 }
 
-func NewMarketEngine(cfg *config.Config, pc *PriceCache) Engine {
+func NewMarketEngine(cfg *config.Config, pc *PriceCache, vig VigProvider) Engine {
 	return &marketEngine{
 		cfg:   cfg,
 		cache: pc,
+		vig:   vig,
 	}
 }
 
@@ -76,7 +78,7 @@ func (e *marketEngine) Price(ctx context.Context, r RFQInput) (string, string, e
 	}
 
 	// 4. Apply the VIG penalties depending on risk
-	baseVig := float64(e.calculateVig(len(r.MVESelectedLegs)))
+	baseVig := float64(e.calculateVig(ctx, len(r.MVESelectedLegs)))
 	
 	// correlation penalty formula from 3.md Line 783
 	corrAdj := marketPriceCents * (correlation.VigMultiplier - 1.0) * 0.5
@@ -100,16 +102,7 @@ func (e *marketEngine) Price(ctx context.Context, r RFQInput) (string, string, e
 }
 
 // calculateVig determines the margin to deduct based on leg count.
-// Aligned with implementation_requirements.md: "case 2: -= 3; case 3: -= 5"
-func (e *marketEngine) calculateVig(legCount int) int {
-	switch legCount {
-	case 1:
-		return 1 // 1 cent for singles
-	case 2:
-		return 3 // 3 cents for doubles
-	case 3:
-		return 5 // 5 cents for triples
-	default:
-		return 7 // 7 cents for 4+ legs
-	}
+// Now uses the injected VigProvider for dynamic reloading.
+func (e *marketEngine) calculateVig(ctx context.Context, legCount int) int {
+	return e.vig.GetVig(ctx, legCount)
 }
