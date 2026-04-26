@@ -59,8 +59,35 @@ func (pc *PriceCache) Get(ticker string) (Price, bool) {
 	return res, true
 }
 
+// Delete removes a ticker from the cache (e.g., when it settles).
+func (pc *PriceCache) Delete(ticker string) {
+	pc.mu.Lock()
+	defer pc.mu.Unlock()
+	delete(pc.books, ticker)
+}
+
+// Prune removes market books that haven't been updated for the given duration.
+func (pc *PriceCache) Prune(olderThan time.Duration) {
+	pc.mu.Lock()
+	defer pc.mu.Unlock()
+	now := time.Now()
+	for ticker, book := range pc.books {
+		if now.Sub(book.UpdatedAt) > olderThan {
+			delete(pc.books, ticker)
+		}
+	}
+}
+
+// Count returns the number of markets currently in cache.
+func (pc *PriceCache) Count() int {
+	pc.mu.RLock()
+	defer pc.mu.RUnlock()
+	return len(pc.books)
+}
+
 // HandleDelta processes an orderbook_delta or orderbook_snapshot message.
-func (pc *PriceCache) HandleDelta(payload []byte) {
+// Returns the market ticker that was updated, and true if successful.
+func (pc *PriceCache) HandleDelta(payload []byte) (string, bool) {
 	var raw struct {
 		Type string `json:"type"`
 		Msg  struct {
@@ -76,19 +103,24 @@ func (pc *PriceCache) HandleDelta(payload []byte) {
 	}
 
 	if err := json.Unmarshal(payload, &raw); err != nil {
-		return
+		return "", false
+	}
+	
+	ticker := raw.Msg.MarketTicker
+	if ticker == "" {
+		return "", false
 	}
 
 	pc.mu.Lock()
 	defer pc.mu.Unlock()
 
-	book, ok := pc.books[raw.Msg.MarketTicker]
+	book, ok := pc.books[ticker]
 	if !ok {
 		book = &marketBook{
 			Bids: make(map[int]int),
 			Asks: make(map[int]int),
 		}
-		pc.books[raw.Msg.MarketTicker] = book
+		pc.books[ticker] = book
 	}
 	book.UpdatedAt = time.Now()
 
@@ -110,4 +142,6 @@ func (pc *PriceCache) HandleDelta(payload []byte) {
 			book.Asks[d.Price] += d.Delta
 		}
 	}
+	
+	return ticker, true
 }

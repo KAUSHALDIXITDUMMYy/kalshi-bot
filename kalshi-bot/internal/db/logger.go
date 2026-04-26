@@ -133,3 +133,93 @@ func (l *Logger) LogFill(ctx context.Context, f FillLog) error {
 	)
 	return err
 }
+
+func (l *Logger) GetUnsettledFillsByTicker(ctx context.Context, ticker string) ([]struct {
+	Sport          string
+	MaxPayoutCents int
+}, error) {
+	// Querying JSONB for the ticker. This handles both single markets and parlays.
+	query := `
+		SELECT sport, max_payout_cents 
+		FROM fill_log 
+		WHERE settled = FALSE AND (
+			legs @> $1 OR legs @> $2
+		)
+	`
+	// Check if ticker is in a list of legs or is the main ticker if stored differently
+	jsonPath1 := fmt.Sprintf(`[{"market_ticker": "%s"}]`, ticker)
+	jsonPath2 := fmt.Sprintf(`[{"ticker": "%s"}]`, ticker)
+
+	rows, err := l.pool.Query(ctx, query, jsonPath1, jsonPath2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []struct {
+		Sport          string
+		MaxPayoutCents int
+	}
+	for rows.Next() {
+		var res struct {
+			Sport          string
+			MaxPayoutCents int
+		}
+		if err := rows.Scan(&res.Sport, &res.MaxPayoutCents); err != nil {
+			return nil, err
+		}
+		results = append(results, res)
+	}
+	return results, nil
+}
+
+func (l *Logger) MarkFillsAsSettled(ctx context.Context, ticker string) error {
+	query := `
+		UPDATE fill_log 
+		SET settled = TRUE 
+		WHERE settled = FALSE AND (
+			legs @> $1 OR legs @> $2
+		)
+	`
+	jsonPath1 := fmt.Sprintf(`[{"market_ticker": "%s"}]`, ticker)
+	jsonPath2 := fmt.Sprintf(`[{"ticker": "%s"}]`, ticker)
+	
+	_, err := l.pool.Exec(ctx, query, jsonPath1, jsonPath2)
+	return err
+}
+
+func (l *Logger) GetInternalBalance(ctx context.Context) (int64, error) {
+	query := `SELECT COALESCE(SUM(pnl_cents), 0) FROM fill_log WHERE settled = TRUE`
+	var pnl int64
+	err := l.pool.QueryRow(ctx, query).Scan(&pnl)
+	return pnl, err
+}
+
+func (l *Logger) ApplySettlement(ctx context.Context, ticker, result string, revenue int) error {
+	// 1. Find the fill
+	queryFind := `SELECT id, max_payout_cents FROM fill_log WHERE settled = FALSE AND (legs @> $1 OR legs @> $2) LIMIT 1`
+	jsonPath1 := fmt.Sprintf(`[{"market_ticker": "%s"}]`, ticker)
+	jsonPath2 := fmt.Sprintf(`[{"ticker": "%s"}]`, ticker)
+
+	var id string
+	var maxPayout int
+	err := l.pool.QueryRow(ctx, queryFind, jsonPath1, jsonPath2).Scan(&id, &maxPayout)
+	if err != nil {
+		return err // No matching unsettled fill
+	}
+
+	// 2. Update P&L
+	// If revenue > 0, we won (or partially won). In Kalshi MM terms, if we sold NO, 
+	// and result is NO, we keep the money.
+	// Actually, Kalshi's revenue field in settlements is "payout received".
+	// For a seller: payout = cost + profit.
+	// P&L = Revenue - MaxPayout (since collateral was locked)
+	// Wait, P&L for a seller is: if win, P&L = YesPrice. If loss, P&L = -NoPrice.
+	// Kalshi Revenue for seller: if win, Revenue = 100. If loss, Revenue = 0.
+	
+	pnl := int(revenue) - maxPayout
+	
+	queryUpdate := `UPDATE fill_log SET settled = TRUE, market_result = $1, pnl_cents = $2 WHERE id = $3`
+	_, err = l.pool.Exec(ctx, queryUpdate, result, pnl, id)
+	return err
+}

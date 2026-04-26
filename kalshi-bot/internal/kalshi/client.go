@@ -76,6 +76,21 @@ type GetMarketsResponse struct {
 	Markets []Market `json:"markets"`
 }
 
+type GetBalanceResponse struct {
+	Balance int64 `json:"balance"` // Cents
+}
+
+type Settlement struct {
+	Ticker      string `json:"ticker"`
+	Result      string `json:"market_result"` // 'yes' or 'no'
+	Revenue     string `json:"revenue"`       // Cents received as string
+	CostDollars string `json:"yes_total_cost_dollars"` 
+}
+
+type GetSettlementsResponse struct {
+	Settlements []Settlement `json:"settlements"`
+}
+
 func (c *Client) CreateQuote(ctx context.Context, req CreateQuoteRequest) (string, error) {
 	b, err := json.Marshal(req)
 	if err != nil {
@@ -132,4 +147,39 @@ func (c *Client) GetMarkets(ctx context.Context) ([]string, error) {
 		tickers = append(tickers, m.Ticker)
 	}
 	return tickers, nil
+}
+
+func (c *Client) GetBalance(ctx context.Context) (int64, error) {
+	resp, err := c.do(ctx, http.MethodGet, "/portfolio/balance", nil)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("get balance: status %d: %s", resp.StatusCode, string(body))
+	}
+	var out GetBalanceResponse
+	if err := json.Unmarshal(body, &out); err != nil {
+		return 0, err
+	}
+	return out.Balance, nil
+}
+
+func (c *Client) GetSettlements(ctx context.Context, minTS int64) ([]Settlement, error) {
+	path := fmt.Sprintf("/portfolio/settlements?min_ts=%d", minTS)
+	resp, err := c.do(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("get settlements: status %d: %s", resp.StatusCode, string(body))
+	}
+	var out GetSettlementsResponse
+	if err := json.Unmarshal(body, &out); err != nil {
+		return nil, err
+	}
+	return out.Settlements, nil
 }

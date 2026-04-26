@@ -6,12 +6,21 @@ import (
 
 // Info holds the decomposed parts of a Kalshi ticker.
 type Info struct {
-	Raw        string
-	Sport      string // NBA, NFL, MLB
-	Date       string // e.g., 24NOV22
-	Entity     string // e.g., LEBRON_JAMES
-	Suffix     string // e.g., OVER-25.5
-	IsEvent    bool   // true if it's just a sport/event prefix (e.g., KXNBA)
+	Raw         string
+	Sport       string // NBA, NFL, MLB
+	Date        string // e.g., 24NOV22
+	Entity      string // e.g., LEBRON_JAMES
+	Suffix      string // e.g., OVER-25.5
+	IsEvent     bool   // true if it's just a sport/event prefix (e.g., KXNBA)
+	IsTeam      bool
+	IsMoneyline bool
+}
+
+// TEAM_IDS from 1.md logic (simplified list for common sports)
+var TEAM_IDS = map[string]bool{
+	"LAKERS": true, "WARRIORS": true, "CELTICS": true, "HEAT": true, "BUCKS": true, "NUGGETS": true,
+	"CHIEFS": true, "EAGLES": true, "COWBOYS": true, "PATRIOTS": true, "PACKERS": true, "49ERS": true,
+	"YANKEES": true, "DODGERS": true, "REDSOX": true, "CUBS": true, "BRAVES": true, "ASTROS": true,
 }
 
 // Parse decomposes a Kalshi ticker string into its functional parts.
@@ -47,11 +56,17 @@ func Parse(t string) Info {
 	// Part 2: Entity (Player/Team)
 	if len(parts) > 2 {
 		info.Entity = parts[2]
+		info.IsTeam = TEAM_IDS[strings.ToUpper(info.Entity)]
 	}
 
 	// Part 3+: Suffix (Market specifics like Over/Under or Score)
 	if len(parts) > 3 {
 		info.Suffix = strings.Join(parts[3:], "-")
+		if info.Suffix == "ML" {
+			info.IsMoneyline = true
+		}
+	} else if len(parts) == 3 {
+		info.IsMoneyline = true
 	}
 
 	return info

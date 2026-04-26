@@ -26,8 +26,8 @@ func (e *marketEngine) Price(ctx context.Context, r RFQInput) (string, string, e
 	marketBuyProb := 1.0
 
 	for _, leg := range r.MVESelectedLegs {
-		ticker, _ := leg["market_ticker"].(string)
-		side, _ := leg["side"].(string)
+		ticker := leg.MarketTicker
+		side := leg.Side
 
 		priceData, ok := e.cache.Get(ticker)
 		if !ok {

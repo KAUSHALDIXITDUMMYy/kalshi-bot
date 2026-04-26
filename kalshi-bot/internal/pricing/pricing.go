@@ -7,6 +7,13 @@ import (
 	"rfqbot/internal/config"
 )
 
+// MVELeg represents a single leg in a parlay RFQ.
+type MVELeg struct {
+	MarketTicker string
+	EventTicker  string
+	Side         string
+}
+
 // RFQInput is a minimal view of an RFQ for pricing.
 type RFQInput struct {
 	ID                 string
@@ -15,8 +22,8 @@ type RFQInput struct {
 	TargetCostDollars  string
 	ContractsFP        string
 	MVECollection      string
-	MVESelectedLegs    []map[string]any
-	RawMsg             map[string]any
+	MVESelectedLegs    []MVELeg
+	IsHVM              bool
 }
 
 // Engine returns yes/no bid dollar strings for CreateQuote.

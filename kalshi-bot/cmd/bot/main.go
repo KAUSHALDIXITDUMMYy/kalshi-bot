@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"rfqbot/internal/auth"
 	"rfqbot/internal/bot"
@@ -70,6 +71,13 @@ func main() {
 	risk := bot.NewRiskEngine(cfg, log, rdb)
 	safety := bot.NewSafetyMonitor(log, rdb)
 	eng := bot.NewEngine(cfg, log, kc, pe, pc, pool, rdb, dbLog, risk, safety)
+	eng.StartBackgroundCleanup(ctx)
+
+	clock := bot.NewClockMonitor(log, safety)
+	clock.Start(ctx)
+
+	recon := bot.NewReconciliationEngine(log, kc, dbLog, rdb, safety)
+	recon.Start(ctx)
 
 	log.Info("rfqbot starting",
 		"rest", cfg.RESTBase,
@@ -80,7 +88,7 @@ func main() {
 	)
 
 	// Start Health Check API
-	healthSrv := health.NewServer(rdb)
+	healthSrv := health.NewServer(rdb, pool, eng, safety)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", healthSrv.HandleHealth)
 	healthPort := os.Getenv("HEALTH_PORT")
@@ -107,8 +115,9 @@ func main() {
 	}
 	log.Info("active markets fetched", "count", len(tickers))
 
-	// 2. Communications Loop (RFQs)
-	go ws.RunDialLoop(ctx, log, cfg.WebSocketURL, signer, eng.HandleWSMessage, []string{"communications"}, nil, cfg.ShardFactor, cfg.ShardKey)
+	// 2. Market Lifecycle Loop (Settlement/Risk Unclogging)
+	// We do not need specific tickers to listen to general lifecycle events
+	go ws.RunDialLoop(ctx, log, cfg.WebSocketURL, signer, eng.HandleWSMessage, []string{"market_lifecycle_v2"}, nil, 0, 0)
 
 	// 3. Orderbook Loop (Market Data)
 	if len(tickers) > 0 {
@@ -118,6 +127,15 @@ func main() {
 		// orderbook_delta does not support sharding, pass 0, 0
 		go ws.RunDialLoop(ctx, log, cfg.WebSocketURL, signer, eng.HandleWSMessage, []string{"orderbook_delta"}, params, 0, 0)
 	}
+
+	// 4. Cache Warm-Up
+	// We wait 3 seconds to let the initial orderbook_snapshots arrive and populate our cache 
+	// before we start listening to RFQs. This fixes the "Snapshot Latency" cache misses.
+	log.Info("warming up price cache for 3 seconds...")
+	time.Sleep(3 * time.Second)
+
+	// 5. Communications Loop (RFQs)
+	go ws.RunDialLoop(ctx, log, cfg.WebSocketURL, signer, eng.HandleWSMessage, []string{"communications"}, nil, cfg.ShardFactor, cfg.ShardKey)
 
 	<-ctx.Done()
 	log.Info("shutdown")

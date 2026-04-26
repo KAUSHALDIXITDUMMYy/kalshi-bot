@@ -71,3 +71,9 @@ func (s *SafetyMonitor) TriggerHalt(ctx context.Context, reason string) {
 	// Also log a specific event key for observability
 	s.rdb.Set(ctx, "safety:last_halt_reason", reason, 24*time.Hour)
 }
+
+func (s *SafetyMonitor) GetStatus() (int, time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.errorCount, s.lastErrorTime
+}

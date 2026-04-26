@@ -1,18 +1,21 @@
 package pricing
 
 import (
+	"fmt"
 	"rfqbot/internal/ticker"
-	"sync"
+	"sort"
+	"strings"
 )
 
 type CorrelationType int
 
 const (
 	None CorrelationType = iota
-	SameGame
-	PlayerTeam
 	SamePlayer
-	Stack       
+	SameTeam
+	PlayerTeam
+	SameGame
+	Stack
 )
 
 // CorrelationResult matches 1.md logic exactly
@@ -23,80 +26,117 @@ type CorrelationResult struct {
 	Reason        string
 }
 
-// Thread-safe map to prevent panics during live API syncs
-type SyncRosterCache struct {
-	mu   sync.RWMutex
-	data map[string]string
-}
-
-func (c *SyncRosterCache) Get(player string) string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	if c.data == nil {
-		return ""
-	}
-	return c.data[player]
-}
-
-func (c *SyncRosterCache) Update(newData map[string]string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.data = newData
-}
-
-// Global cached instance
-var RosterCache = &SyncRosterCache{
-	data: map[string]string{
-		"LEBRON_JAMES":  "LAL",
-		"ANTHONY_DAVIS": "LAL",
-		"STEPHEN_CURRY": "GSW",
-		"KLAY_THOMPSON": "GSW",
-		"KEVIN_DURANT":  "PHX",
-		"DEVIN_BOOKER":  "PHX",
-	},
-}
-
 // DetectCorrelation checks an array of RFQ legs and returns the exact CorrelationResult specified in 1.md
-func DetectCorrelation(legs []map[string]interface{}) CorrelationResult {
+func DetectCorrelation(legs []MVELeg) CorrelationResult {
 	if len(legs) <= 1 {
 		return CorrelationResult{Type: None, VigMultiplier: 1.0, ShouldDecline: false, Reason: "Independent"}
 	}
 
-	seenPlayers := make(map[string]bool)
-	seenTeams := make(map[string]bool)
-	seenGames := make(map[string]bool)
+	// 1. Group legs by entity (Player/Team)
+	entityGroups := make(map[string][]ticker.Info)
+	dateGroups := make(map[string][]ticker.Info)
 
-	highestRisk := None
-	
 	for _, leg := range legs {
-		eventTicker, _ := leg["event_ticker"].(string)
-		marketTicker, _ := leg["market_ticker"].(string)
-
-		parsed := ticker.Parse(marketTicker)
-		player := parsed.Entity
-		team := RosterCache.Get(player)
-
-		// 1. Same Player (Moderate-High Correlation)
-		if seenPlayers[player] && player != "" {
-			return CorrelationResult{Type: SamePlayer, VigMultiplier: 1.8, ShouldDecline: false, Reason: "Same player parlay"}
-		}
-
-		// 2. Stack (Same Team, Same Game) -> Decline instantly
-		if seenTeams[team] && team != "" && seenGames[eventTicker] {
-			return CorrelationResult{Type: Stack, VigMultiplier: 3.0, ShouldDecline: true, Reason: "Same team stack parlay"}
-		} else if seenGames[eventTicker] {
-			// 3. Same Game (Opposite teams)
-			highestRisk = SameGame
-		}
-
-		seenPlayers[player] = true
-		seenTeams[team] = true
-		seenGames[eventTicker] = true
+		t := ticker.Parse(leg.MarketTicker)
+		key := fmt.Sprintf("%s:%s", t.Date, t.Entity)
+		entityGroups[key] = append(entityGroups[key], t)
+		dateGroups[t.Date] = append(dateGroups[t.Date], t)
 	}
 
-	if highestRisk == SameGame {
-		return CorrelationResult{Type: SameGame, VigMultiplier: 1.5, ShouldDecline: false, Reason: "Multiple players same game"}
+	// 2. Check STACK: 3+ legs same player/team
+	for key, lgs := range entityGroups {
+		if len(lgs) >= 3 {
+			return CorrelationResult{
+				Type:          Stack,
+				VigMultiplier: 3.0,
+				ShouldDecline: true,
+				Reason:        fmt.Sprintf("3+ legs same entity: %s", key),
+			}
+		}
+	}
+
+	// 3. Check SAME_PLAYER: 2 legs same player
+	for _, lgs := range entityGroups {
+		if len(lgs) == 2 && !lgs[0].IsTeam {
+			return CorrelationResult{
+				Type:          SamePlayer,
+				VigMultiplier: 1.8,
+				ShouldDecline: false,
+				Reason:        fmt.Sprintf("2 legs same player: %s", lgs[0].Entity),
+			}
+		}
+	}
+
+	// 4. Check SAME_GAME: Multiple players from same matchup
+	for date, dlegs := range dateGroups {
+		if len(dlegs) < 2 {
+			continue
+		}
+
+		matchups := groupByMatchup(dlegs, date)
+		for matchup, mlegs := range matchups {
+			if len(mlegs) >= 2 {
+				hasML := false
+				hasProp := false
+				for _, l := range mlegs {
+					if l.IsMoneyline {
+						hasML = true
+					} else {
+						hasProp = true
+					}
+				}
+
+				if hasML && hasProp {
+					return CorrelationResult{
+						Type:          PlayerTeam,
+						VigMultiplier: 2.0,
+						ShouldDecline: false,
+						Reason:        fmt.Sprintf("ML + player prop same game: %s", matchup),
+					}
+				} else {
+					return CorrelationResult{
+						Type:          SameGame,
+						VigMultiplier: 1.5,
+						ShouldDecline: false,
+						Reason:        fmt.Sprintf("Multiple legs same game: %s", matchup),
+					}
+				}
+			}
+		}
 	}
 
 	return CorrelationResult{Type: None, VigMultiplier: 1.0, ShouldDecline: false, Reason: "Independent"}
+}
+
+func groupByMatchup(legs []ticker.Info, date string) map[string][]ticker.Info {
+	matchups := make(map[string][]ticker.Info)
+	for _, leg := range legs {
+		team := ""
+		if leg.IsTeam {
+			team = leg.Entity
+		} else {
+			team = RosterCache.GetTeam(leg.Entity)
+		}
+
+		if team == "" {
+			// If we don't know the team, we can't safely group by matchup.
+			// Fallback to "UNKNOWN"
+			matchups["UNKNOWN"] = append(matchups["UNKNOWN"], leg)
+			continue
+		}
+
+		opp := RosterCache.GetOpponent(team, date)
+		if opp == "" {
+			// Single team known but no opponent found in schedule
+			matchups[team] = append(matchups[team], leg)
+			continue
+		}
+
+		// Normalize matchup key so A vs B == B vs A
+		teams := []string{team, opp}
+		sort.Strings(teams)
+		matchupKey := strings.Join(teams, ":")
+		matchups[matchupKey] = append(matchups[matchupKey], leg)
+	}
+	return matchups
 }

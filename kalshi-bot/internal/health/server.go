@@ -7,19 +7,33 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 )
 
-// Server represents the Health Check HTTP server
 type Server struct {
 	rdb       *redis.Client
+	db        *pgxpool.Pool
+	eng       StatsProvider
+	safety    SafetyMonitor
 	startTime time.Time
 }
 
-// NewServer initializes a new Health Server with the boot timestamp.
-func NewServer(rdb *redis.Client) *Server {
+type StatsProvider interface {
+	GetStats() map[string]int
+}
+
+type SafetyMonitor interface {
+	GetStatus() (int, time.Time)
+}
+
+// NewServer initializes a new Health Server with full system visibility.
+func NewServer(rdb *redis.Client, db *pgxpool.Pool, eng StatsProvider, safety SafetyMonitor) *Server {
 	return &Server{
 		rdb:       rdb,
+		db:        db,
+		eng:       eng,
+		safety:    safety,
 		startTime: time.Now(),
 	}
 }
@@ -31,6 +45,9 @@ type Response struct {
 	CircuitBreakers map[string]any `json:"circuit_breakers"`
 	Capacity        map[string]any `json:"capacity"`
 	ExposureCents   map[string]any `json:"exposure_cents"`
+	Trackers        map[string]int `json:"trackers"`
+	Safety          map[string]any `json:"safety"`
+	Postgres        string         `json:"postgres"`
 }
 
 // HandleHealth provides a snapshot of the bot's state using a Redis pipeline.
@@ -113,6 +130,24 @@ func (s *Server) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	resp.ExposureCents["nfl"] = expNFL
 	resp.ExposureCents["nba"] = expNBA
 	resp.ExposureCents["mlb"] = expMLB
+
+	// Internal Trackers
+	resp.Trackers = s.eng.GetStats()
+
+	// Safety Monitor
+	errCount, lastErr := s.safety.GetStatus()
+	resp.Safety = map[string]any{
+		"error_count":     errCount,
+		"last_error_time": lastErr,
+	}
+
+	// Postgres Health
+	if err := s.db.Ping(ctx); err != nil {
+		resp.Postgres = "DISCONNECTED"
+		resp.Status = "DEGRADED (Postgres Error)"
+	} else {
+		resp.Postgres = "CONNECTED"
+	}
 
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)

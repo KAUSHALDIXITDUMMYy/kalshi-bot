@@ -102,6 +102,33 @@ func (re *RiskEngine) RecordSettlement(ctx context.Context, sport string, ticker
 	return err
 }
 
+// ClearLegExposure zeroes out the risk for a specific leg when it settles.
+// This prevents "Risk Clogging" on a specific market.
+func (re *RiskEngine) ClearLegExposure(ctx context.Context, ticker string) error {
+	legKey := fmt.Sprintf("exposure:leg:%s", ticker)
+	err := re.rdb.Del(ctx, legKey).Err()
+	if err == nil {
+		re.log.Info("leg exposure cleared (settlement)", "ticker", ticker)
+	}
+	return err
+}
+
+// DecrementGlobalExposure reduces sport and daily totals.
+// Used when a market settles to release broader risk budget.
+func (re *RiskEngine) DecrementGlobalExposure(ctx context.Context, sport string, payoutRiskCents int64) error {
+	if payoutRiskCents <= 0 {
+		return nil
+	}
+	pipe := re.rdb.Pipeline()
+	pipe.DecrBy(ctx, fmt.Sprintf("exposure:sport:%s", sport), payoutRiskCents)
+	pipe.DecrBy(ctx, "exposure:daily:total", payoutRiskCents)
+	_, err := pipe.Exec(ctx)
+	if err == nil {
+		re.log.Info("global exposure released", "sport", sport, "amount_cents", payoutRiskCents)
+	}
+	return err
+}
+
 func getInt64(val string) int64 {
 	i, _ := strconv.ParseInt(val, 10, 64)
 	return i

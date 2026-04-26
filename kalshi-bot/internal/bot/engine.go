@@ -28,44 +28,77 @@ type Engine struct {
 	db     *db.Logger
 	rdb    *redis.Client
 	risk   *RiskEngine
-	safety *SafetyMonitor
-	quotes *quoteTracker
+	safety     *SafetyMonitor
+	quotes     *quoteTracker
+	activeRFQs *activeRFQTracker
 }
 
 func NewEngine(cfg *config.Config, log *slog.Logger, client *kalshi.Client, pe pricing.Engine, pc *pricing.PriceCache, pool *pgxpool.Pool, rdb *redis.Client, dbLog *db.Logger, risk *RiskEngine, safety *SafetyMonitor) *Engine {
 	return &Engine{
-		cfg:    cfg,
-		log:    log,
-		client: client,
-		price:  pe,
-		cache:  pc,
-		pool:   pool,
-		db:     dbLog,
-		rdb:    rdb,
-		risk:   risk,
-		safety: safety,
-		quotes: newQuoteTracker(),
+		cfg:        cfg,
+		log:        log,
+		client:     client,
+		price:      pe,
+		cache:      pc,
+		pool:       pool,
+		db:         dbLog,
+		rdb:        rdb,
+		risk:       risk,
+		safety:     safety,
+		quotes:     newQuoteTracker(),
+		activeRFQs: newActiveRFQTracker(),
 	}
 }
 
-// HandleWSMessage parses a single WebSocket JSON payload (one line/object).
+// StartBackgroundCleanup runs periodic pruning of in-memory maps to prevent memory leaks.
+func (e *Engine) StartBackgroundCleanup(ctx context.Context) {
+	ticker := time.NewTicker(5 * time.Minute)
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				e.log.Info("running background memory cleanup")
+				// Remove quotes older than 2 hours
+				e.quotes.Prune(2 * time.Hour)
+				// Remove RFQs older than 2 minutes (they expire)
+				e.activeRFQs.Prune()
+				// Remove price data not updated for 12 hours
+				e.cache.Prune(12 * time.Hour)
+			case <-ctx.Done():
+				ticker.Stop()
+				return
+			}
+		}
+	}()
+}
+
+// HandleWSMessage parses a single WebSocket JSON payload using typed structs.
 func (e *Engine) HandleWSMessage(ctx context.Context, payload []byte) {
-	var raw map[string]any
-	if err := json.Unmarshal(payload, &raw); err != nil {
+	var env WSEvent
+	if err := json.Unmarshal(payload, &env); err != nil {
 		e.log.Debug("ws skip non-json", "err", err)
 		return
 	}
-	typ, _ := raw["type"].(string)
+	typ := env.Type
 	switch typ {
 	case "rfq_created":
-		e.onRFQCreated(ctx, raw)
+		e.onRFQCreated(ctx, env.Msg)
 	case "quote_accepted":
-		e.onQuoteAccepted(ctx, raw)
+		e.onQuoteAccepted(ctx, env.Msg)
+	case "market_settled", "market_lifecycle":
+		e.onMarketSettled(ctx, env.Msg)
 	case "orderbook_delta", "orderbook_snapshot":
-		e.cache.HandleDelta(payload)
+		ticker, ok := e.cache.HandleDelta(payload)
+		if ok {
+			e.requoteAffectedRFQs(ctx, ticker)
+		}
 	case "quote_created", "quote_executed":
 		e.log.Debug("ws event", "type", typ, "body", string(payload))
 	case "rfq_deleted":
+		var msg struct { ID string `json:"id"` }
+		if err := json.Unmarshal(env.Msg, &msg); err == nil {
+			e.activeRFQs.remove(msg.ID)
+		}
 		e.rdb.Decr(ctx, "rfq:count:open")
 		e.log.Debug("ws event", "type", typ, "body", string(payload))
 	case "subscribed", "ok", "error":
@@ -77,28 +110,22 @@ func (e *Engine) HandleWSMessage(ctx context.Context, payload []byte) {
 	}
 }
 
-func (e *Engine) onRFQCreated(ctx context.Context, raw map[string]any) {
-	msg, _ := raw["msg"].(map[string]any)
-	if msg == nil {
-		e.log.Warn("rfq_created missing msg")
+func (e *Engine) onRFQCreated(ctx context.Context, rawMsg json.RawMessage) {
+	var msg RFQMsg
+	if err := json.Unmarshal(rawMsg, &msg); err != nil {
+		e.log.Warn("rfq_created invalid msg format")
 		return
 	}
-	id, _ := msg["id"].(string)
+
 	rfq := pricing.RFQInput{
-		ID:                id,
-		MarketTicker:      str(msg["market_ticker"]),
-		EventTicker:       str(msg["event_ticker"]),
-		TargetCostDollars: str(msg["target_cost_dollars"]),
-		ContractsFP:       str(msg["contracts_fp"]),
-		MVECollection:     str(msg["mve_collection_ticker"]),
-		RawMsg:            msg,
-	}
-	if legs, ok := msg["mve_selected_legs"].([]any); ok {
-		for _, l := range legs {
-			if m, ok := l.(map[string]any); ok {
-				rfq.MVESelectedLegs = append(rfq.MVESelectedLegs, m)
-			}
-		}
+		ID:                msg.ID,
+		MarketTicker:      msg.MarketTicker,
+		EventTicker:       msg.EventTicker,
+		TargetCostDollars: msg.TargetCostDollars,
+		ContractsFP:       msg.ContractsFP,
+		MVECollection:     msg.MVECollectionTicker,
+		MVESelectedLegs:   msg.MVESelectedLegs,
+		IsHVM:             msg.IsHVM,
 	}
 
 	e.log.Info("rfq",
@@ -133,8 +160,8 @@ func (e *Engine) onRFQCreated(ctx context.Context, raw map[string]any) {
 		var tickers []string
 		if len(rfq.MVESelectedLegs) > 0 {
 			for _, l := range rfq.MVESelectedLegs {
-				if t, ok := l["market_ticker"].(string); ok {
-					tickers = append(tickers, t)
+				if l.MarketTicker != "" {
+					tickers = append(tickers, l.MarketTicker)
 				}
 			}
 		} else {
@@ -162,7 +189,7 @@ func (e *Engine) onRFQCreated(ctx context.Context, raw map[string]any) {
 			Legs:          rfq.MVESelectedLegs,
 			ContractsFP:   parseFloat(rfq.ContractsFP),
 			TargetCostUSD: parseFloat(rfq.TargetCostDollars),
-			RequesterID:   str(msg["creator_id"]),
+			RequesterID:   msg.CreatorID,
 			Quoted:        quoted,
 			SkipReason:    skipReason,
 		})
@@ -189,13 +216,13 @@ func (e *Engine) onRFQCreated(ctx context.Context, raw map[string]any) {
 	cctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
 	qid, err := e.client.CreateQuote(cctx, kalshi.CreateQuoteRequest{
-		RFQID:         id,
+		RFQID:         rfq.ID,
 		YesBid:        yes,
 		NoBid:         no,
 		RestRemainder: false,
 	})
 	if err != nil {
-		e.log.Error("create quote failed", "rfq_id", id, "err", err)
+		e.log.Error("create quote failed", "rfq_id", rfq.ID, "err", err)
 		e.safety.RecordError(ctx, err)
 		return
 	}
@@ -217,25 +244,41 @@ func (e *Engine) onRFQCreated(ctx context.Context, raw map[string]any) {
 	}()
 
 	e.quotes.add(qid)
-	e.log.Info("quoted", "rfq_id", id, "quote_id", qid, "yes", yes, "no", no)
+	e.activeRFQs.addOrUpdate(rfq, yes)
+	e.log.Info("quoted", "rfq_id", rfq.ID, "quote_id", qid, "yes", yes, "no", no)
 }
 
-func (e *Engine) onQuoteAccepted(ctx context.Context, raw map[string]any) {
-	msg, _ := raw["msg"].(map[string]any)
-	if msg == nil {
-		e.log.Warn("quote_accepted missing msg")
+func (e *Engine) onQuoteAccepted(ctx context.Context, rawMsg json.RawMessage) {
+	var msg QuoteAcceptedMsg
+	if err := json.Unmarshal(rawMsg, &msg); err != nil {
+		e.log.Warn("quote_accepted invalid msg format")
 		return
 	}
-	qid, _ := msg["quote_id"].(string)
+	qid := msg.QuoteID
 	if qid == "" || !e.quotes.owns(qid) {
 		e.log.Debug("quote_accepted not ours", "quote_id", qid)
 		return
 	}
+	
+	rfq, ok := e.activeRFQs.Get(msg.RFQID)
+	if !ok {
+		e.log.Warn("quote accepted for untracked RFQ", "rfq_id", msg.RFQID)
+	}
+
+	e.activeRFQs.remove(msg.RFQID)
 	e.rdb.Decr(ctx, "rfq:count:open")
 	e.log.Info("quote accepted — confirming", "quote_id", qid)
 
 	confirm := func() {
-		cctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+		// HVM Check: If it's a High Volatility Market, we only have 1s to confirm.
+		// Otherwise, use the standard 25s window.
+		timeout := 25 * time.Second
+		if msg.IsHVM || (ok && rfq.IsHVM) {
+			timeout = 1 * time.Second
+			e.log.Info("HVM detected — switching to 1s confirmation window", "quote_id", qid)
+		}
+
+		cctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 		if err := e.client.ConfirmQuote(cctx, qid); err != nil {
 			e.log.Error("confirm failed", "quote_id", qid, "err", err)
@@ -248,29 +291,47 @@ func (e *Engine) onQuoteAccepted(ctx context.Context, raw map[string]any) {
 
 		// Log Fill & Update Exposure
 		go func() {
-			side, _ := msg["accepted_side"].(string)
-			rfqID := str(msg["rfq_id"])
+			side := msg.AcceptedSide
+			rfqID := msg.RFQID
 			e.db.UpdateQuoteStatus(context.Background(), qid, "ACCEPTED", side)
 
-			contracts := parseFloat(str(msg["contracts_accepted_fp"]))
-			yesCents := int64(parseFloat(str(msg["yes_bid_dollars"])) * 100)
+			contracts := parseFloat(msg.ContractsAcceptedFP)
+			yesCents := int64(parseFloat(msg.YesBidDollars) * 100)
 			payoutRiskCents := (100 - yesCents) * int64(contracts)
 
-			// Record exposure in Redis
-			ticker := str(msg["market_ticker"])
-			e.risk.RecordFill(context.Background(), "UNKNOWN", []string{ticker}, payoutRiskCents)
+			// Determine sport and legs from tracked RFQ
+			sport := "UNKNOWN"
+			var legs interface{} = nil
+			var tickerList []string
+			
+			if ok {
+				sport = ticker.Parse(rfq.MarketTicker).Sport
+				legs = rfq.MVESelectedLegs
+				if len(rfq.MVESelectedLegs) > 0 {
+					for _, l := range rfq.MVESelectedLegs {
+						tickerList = append(tickerList, l.MarketTicker)
+					}
+				} else {
+					tickerList = []string{rfq.MarketTicker}
+				}
+			} else {
+				tickerList = []string{msg.MarketTicker}
+			}
+
+			// Record exposure in Redis with correct sport
+			e.risk.RecordFill(context.Background(), sport, tickerList, payoutRiskCents)
 
 			e.db.LogFill(context.Background(), db.FillLog{
 				QuoteID:        qid,
 				QuoteReqID:     rfqID,
-				Sport:          "UNKNOWN",
+				Sport:          sport,
 				ContractsFP:    contracts,
 				AcceptedSide:   side,
 				CostCents:      int(yesCents),
 				MaxPayoutCents: int(payoutRiskCents),
 				YesPriceCents:  int(yesCents),
 				NoPriceCents:   100 - int(yesCents),
-				Legs:           nil,
+				Legs:           legs,
 				ConfirmedAt:    time.Now(),
 			})
 		}()
@@ -280,6 +341,86 @@ func (e *Engine) onQuoteAccepted(ctx context.Context, raw map[string]any) {
 		go confirm()
 	} else {
 		confirm()
+	}
+}
+
+// onMarketSettled clears exposure for markets that have ended.
+func (e *Engine) onMarketSettled(ctx context.Context, rawMsg json.RawMessage) {
+	var msg MarketSettledMsg
+	if err := json.Unmarshal(rawMsg, &msg); err != nil {
+		return
+	}
+	
+	ticker := msg.MarketTicker
+	status := msg.Status
+	
+	// If the market is settled, cleared, or determined, we free up the risk budget.
+	if ticker != "" && (status == "settled" || status == "determined" || status == "cleared") {
+		e.log.Info("market settled — releasing risk budget", "ticker", ticker, "status", status)
+		
+		// 1. Clear the specific leg (atomic)
+		e.risk.ClearLegExposure(ctx, ticker)
+		
+		// 2. Fetch all fills related to this market to release sport and daily totals
+		fills, err := e.db.GetUnsettledFillsByTicker(ctx, ticker)
+		if err == nil {
+			for _, f := range fills {
+				e.risk.DecrementGlobalExposure(ctx, f.Sport, int64(f.MaxPayoutCents))
+			}
+			// Mark them as settled so we don't clear them twice if another event arrives
+			e.db.MarkFillsAsSettled(ctx, ticker)
+		} else {
+			e.log.Error("failed to fetch fills for risk release", "ticker", ticker, "err", err)
+		}
+
+		e.cache.Delete(ticker)
+	}
+}
+
+// requoteAffectedRFQs recalculates and issues new quotes for active RFQs if the orderbook changes.
+func (e *Engine) requoteAffectedRFQs(ctx context.Context, ticker string) {
+	affected := e.activeRFQs.getAffectedRFQs(ticker)
+	for _, tr := range affected {
+		// 1. Try to lock this RFQ for requoting (handles throttle + concurrency)
+		if !e.activeRFQs.TryLockForRequote(tr.rfq.ID) {
+			continue
+		}
+
+		yes, no, err := e.price.Price(ctx, tr.rfq)
+		if err != nil || yes == tr.lastYesBid {
+			// No change or error, release lock and skip
+			e.activeRFQs.ReleaseLock(tr.rfq.ID)
+			continue
+		}
+
+		e.log.Info("requoting due to market delta", "rfq_id", tr.rfq.ID, "old_yes", tr.lastYesBid, "new_yes", yes)
+		
+		cctx, cancel := context.WithTimeout(ctx, 8*time.Second)
+		qid, err := e.client.CreateQuote(cctx, kalshi.CreateQuoteRequest{
+			RFQID:         tr.rfq.ID,
+			YesBid:        yes,
+			NoBid:         no,
+			RestRemainder: false,
+		})
+		cancel()
+		
+		if err == nil {
+			e.quotes.add(qid)
+			e.activeRFQs.addOrUpdate(tr.rfq, yes) // addOrUpdate also resets isProcessing to false
+			
+			go func(id, reqId, y, n string) {
+				e.db.LogQuote(context.Background(), db.QuoteLog{
+					QuoteID:       id,
+					QuoteReqID:    reqId,
+					YesPriceCents: int(parseFloat(y) * 100),
+					NoPriceCents:  int(parseFloat(n) * 100),
+					LatencyMS:     0, // Requote via delta
+				})
+			}(qid, tr.rfq.ID, yes, no)
+		} else {
+			e.log.Error("requote failed", "rfq_id", tr.rfq.ID, "err", err)
+			e.activeRFQs.ReleaseLock(tr.rfq.ID)
+		}
 	}
 }
 
@@ -298,4 +439,13 @@ func parseFloat(s string) float64 {
 	var f float64
 	fmt.Sscanf(s, "%f", &f)
 	return f
+}
+
+// GetStats returns internal metrics for the health API.
+func (e *Engine) GetStats() map[string]int {
+	return map[string]int{
+		"active_rfqs":    e.activeRFQs.Count(),
+		"tracked_quotes": e.quotes.Count(),
+		"price_cache":    e.cache.Count(),
+	}
 }

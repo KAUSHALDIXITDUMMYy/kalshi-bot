@@ -7,42 +7,42 @@ import (
 func TestDetectCorrelation(t *testing.T) {
 	tests := []struct {
 		name          string
-		legs          []map[string]interface{}
+		legs          []MVELeg
 		expectedType  CorrelationType
 		shouldDecline bool
 	}{
 		{
-			name: "Same Player - LeBron points and assists",
-			legs: []map[string]interface{}{
-				{"event_ticker": "KXNBA-25OCT24", "market_ticker": "KXNBA-25OCT24-LEBRON_JAMES-PTS"},
-				{"event_ticker": "KXNBA-25OCT24", "market_ticker": "KXNBA-25OCT24-LEBRON_JAMES-AST"},
+			name: "Same Player - Two NBA legs same player",
+			legs: []MVELeg{
+				{EventTicker: "KXNBA-25OCT24", MarketTicker: "KXNBA-25OCT24-LEBRON_JAMES-PTS"},
+				{EventTicker: "KXNBA-25OCT24", MarketTicker: "KXNBA-25OCT24-LEBRON_JAMES-REB"},
 			},
 			expectedType:  SamePlayer,
 			shouldDecline: false,
 		},
 		{
-			name: "Stack - LeBron and AD same team, same game",
-			legs: []map[string]interface{}{
-				{"event_ticker": "KXNBA-25OCT24", "market_ticker": "KXNBA-25OCT24-LEBRON_JAMES-PTS"},
-				{"event_ticker": "KXNBA-25OCT24", "market_ticker": "KXNBA-25OCT24-ANTHONY_DAVIS-REB"},
+			name: "Stack - LeBron and AD on same team",
+			legs: []MVELeg{
+				{EventTicker: "KXNBA-25OCT24", MarketTicker: "KXNBA-25OCT24-LEBRON_JAMES-PTS"},
+				{EventTicker: "KXNBA-25OCT24", MarketTicker: "KXNBA-25OCT24-ANTHONY_DAVIS-REB"},
 			},
 			expectedType:  Stack,
 			shouldDecline: true, // Should be declined because they are on the same team (LAL)
 		},
 		{
 			name: "Same Game - LeBron and Curry opposing teams",
-			legs: []map[string]interface{}{
-				{"event_ticker": "KXNBA-25OCT24", "market_ticker": "KXNBA-25OCT24-LEBRON_JAMES-PTS"},
-				{"event_ticker": "KXNBA-25OCT24", "market_ticker": "KXNBA-25OCT24-STEPHEN_CURRY-3PM"},
+			legs: []MVELeg{
+				{EventTicker: "KXNBA-25OCT24", MarketTicker: "KXNBA-25OCT24-LEBRON_JAMES-PTS"},
+				{EventTicker: "KXNBA-25OCT24", MarketTicker: "KXNBA-25OCT24-STEPHEN_CURRY-3PM"},
 			},
 			expectedType:  SameGame,
 			shouldDecline: false,
 		},
 		{
 			name: "Independent - Different games",
-			legs: []map[string]interface{}{
-				{"event_ticker": "KXNBA-25OCT24", "market_ticker": "KXNBA-25OCT24-LEBRON_JAMES-PTS"},
-				{"event_ticker": "KXNBA-26OCT24", "market_ticker": "KXNBA-26OCT24-KEVIN_DURANT-PTS"},
+			legs: []MVELeg{
+				{EventTicker: "KXNBA-25OCT24", MarketTicker: "KXNBA-25OCT24-LEBRON_JAMES-PTS"},
+				{EventTicker: "KXNBA-26OCT24", MarketTicker: "KXNBA-26OCT24-KEVIN_DURANT-PTS"},
 			},
 			expectedType:  None,
 			shouldDecline: false,

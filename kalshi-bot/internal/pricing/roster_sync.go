@@ -6,8 +6,48 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
+
+// RosterStorage holds player-to-team and team-to-opponent mappings.
+type RosterStorage struct {
+	mu            sync.RWMutex
+	playerToTeam  map[string]string            // "LEBRON_JAMES" -> "LAL"
+	teamToOpponent map[string]map[string]string // "25MAR22" -> {"LAL": "DEN"}
+}
+
+var RosterCache = &RosterStorage{
+	playerToTeam:  make(map[string]string),
+	teamToOpponent: make(map[string]map[string]string),
+}
+
+func (s *RosterStorage) Update(newRoster map[string]string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.playerToTeam = newRoster
+}
+
+func (s *RosterStorage) UpdateSchedule(date string, schedule map[string]string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.teamToOpponent[date] = schedule
+}
+
+func (s *RosterStorage) GetTeam(player string) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.playerToTeam[player]
+}
+
+func (s *RosterStorage) GetOpponent(team, date string) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if day, ok := s.teamToOpponent[date]; ok {
+		return day[team]
+	}
+	return ""
+}
 
 // StartDailyRosterSync launches a background Goroutine that fetches the balldontlie.io
 // API once immediately, and then daily at 3:00 AM, mapping all players to their teams.
