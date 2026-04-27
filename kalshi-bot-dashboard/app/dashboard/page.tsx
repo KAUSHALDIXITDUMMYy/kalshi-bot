@@ -58,6 +58,19 @@ interface BotStats {
     ws_latency_ms: number;
   };
   postgres: string;
+  memory_mb: number;
+}
+
+interface DecisionLog {
+  rfq_id: string;
+  sport: string;
+  leg_count: number;
+  quoted: boolean;
+  skip_reason: string;
+  quote_id: string | null;
+  yes: number | null;
+  no: number | null;
+  latency: number | null;
 }
 
 interface AuditLog {
@@ -90,6 +103,7 @@ function UnifiedDashboardInner() {
   const [stats, setStats] = useState<BotStats | null>(null);
   const [config, setConfig] = useState<Record<string, string | null>>({});
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [decisionLogs, setDecisionLogs] = useState<DecisionLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -137,16 +151,32 @@ function UnifiedDashboardInner() {
     }
   }, []);
 
+  const fetchDecisionLogs = useCallback(async () => {
+    try {
+      const res = await fetch("/api/bot/logs");
+      if (res.ok) {
+        const data = await res.json();
+        setDecisionLogs(data);
+      }
+    } catch (err) {
+      console.error("Decision logs fetch failed:", err);
+    }
+  }, []);
+
   useEffect(() => {
     fetchStats();
     fetchConfig();
     fetchAudit();
+    fetchDecisionLogs();
     const interval = setInterval(() => {
       fetchStats();
-      if (activeTab === "audit" || activeTab === "overview") fetchAudit();
+      if (activeTab === "audit" || activeTab === "overview") {
+        fetchAudit();
+        fetchDecisionLogs();
+      }
     }, 2000);
     return () => clearInterval(interval);
-  }, [fetchStats, fetchConfig, fetchAudit, activeTab]);
+  }, [fetchStats, fetchConfig, fetchAudit, fetchDecisionLogs, activeTab]);
 
   useEffect(() => {
     const tab = searchParams.get("tab");
@@ -235,7 +265,7 @@ function UnifiedDashboardInner() {
              <div className="glass-card p-4 rounded-xl border border-white/5 flex items-center justify-between">
                 <div>
                    <h4 className="text-[8px] font-black uppercase text-white/30 tracking-[0.2em] mb-1">Node Throughput</h4>
-                   <p className="text-lg font-black text-white italic">412 <span className="text-[10px] text-white/20 not-italic">REQ/MIN</span></p>
+                   <p className="text-lg font-black text-white italic">{stats?.trackers.throughput || 0} <span className="text-[10px] text-white/20 not-italic">RFQ/MIN</span></p>
                 </div>
                 <div className="h-8 w-16 bg-white/[0.02] rounded flex items-end gap-0.5 p-1">
                    {[4, 7, 5, 8, 10, 6, 9, 7].map((h, i) => <div key={i} className="flex-1 bg-cyan-neon/20 rounded-sm" style={{ height: `${h * 10}%` }} />)}
@@ -243,22 +273,22 @@ function UnifiedDashboardInner() {
              </div>
              <div className="glass-card p-4 rounded-xl border border-white/5 flex items-center justify-between">
                 <div>
-                   <h4 className="text-[8px] font-black uppercase text-white/30 tracking-[0.2em] mb-1">Queue Pressure</h4>
-                   <p className="text-lg font-black text-white italic">0.02% <span className="text-[10px] text-white/20 not-italic">DROPPED</span></p>
+                   <h4 className="text-[8px] font-black uppercase text-white/30 tracking-[0.2em] mb-1">Active Quotes</h4>
+                   <p className="text-lg font-black text-white italic">{stats?.trackers.tracked_quotes || 0} <span className="text-[10px] text-white/20 not-italic">ACTIVE</span></p>
                 </div>
                 <div className="text-chart-green text-[10px] font-black italic">NOMINAL</div>
              </div>
              <div className="glass-card p-4 rounded-xl border border-white/5 flex items-center justify-between">
                 <div>
                    <h4 className="text-[8px] font-black uppercase text-white/30 tracking-[0.2em] mb-1">Memory Profile</h4>
-                   <p className="text-lg font-black text-white italic">1.4 <span className="text-[10px] text-white/20 not-italic">GB</span></p>
+                   <p className="text-lg font-black text-white italic">{stats?.memory_mb || 0} <span className="text-[10px] text-white/20 not-italic">MB</span></p>
                 </div>
                 <div className="text-white/20 text-[10px] font-black italic">STABLE</div>
              </div>
              <div className="glass-card p-4 rounded-xl border border-white/5 flex items-center justify-between">
                 <div>
-                   <h4 className="text-[8px] font-black uppercase text-white/30 tracking-[0.2em] mb-1">Uptime</h4>
-                   <p className="text-lg font-black text-white italic">99.98% <span className="text-[10px] text-white/20 not-italic">SLA</span></p>
+                   <h4 className="text-[8px] font-black uppercase text-white/30 tracking-[0.2em] mb-1">Price Cache</h4>
+                   <p className="text-lg font-black text-white italic">{stats?.trackers.price_cache || 0} <span className="text-[10px] text-white/20 not-italic">TICKERS</span></p>
                 </div>
                 <Clock size={16} className="text-cyan-neon opacity-20" />
              </div>
@@ -319,31 +349,59 @@ function UnifiedDashboardInner() {
                     </div>
                   </div>
 
-                  {/* Market Trends (Chart) */}
-                  <div className="glass-card rounded-2xl border border-white/5 flex flex-col shadow-2xl h-[450px] relative overflow-hidden bg-black/20">
-                     <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between bg-white/[0.01]">
-                        <h2 className="text-xs font-black uppercase tracking-tight text-white italic flex items-center gap-2">
-                           <TrendingUp size={14} className="text-cyan-neon" />
-                           Market Intelligence
-                        </h2>
-                        <div className="flex gap-1">
-                           {['1M', '5M', '15M', '1H'].map(t => (
-                              <button key={t} className="text-[8px] font-black px-2 py-0.5 rounded bg-white/5 text-white/40 hover:text-white transition-colors uppercase">{t}</button>
-                           ))}
-                        </div>
-                     </div>
-                     <div className="flex-1 p-8 flex flex-col items-center justify-center relative">
-                        <div className="absolute inset-0 bg-gradient-to-t from-cyan-neon/5 to-transparent pointer-events-none" />
-                        <BarChart3 size={64} className="mb-6 text-white/5" />
-                        <div className="text-center space-y-2 relative z-10">
-                           <p className="text-[11px] font-black uppercase tracking-[0.4em] text-white/60 italic leading-relaxed">
-                             Live Price Action Stream
-                           </p>
-                           <p className="text-[9px] font-medium text-white/20 uppercase tracking-[0.2em]">
-                              Connecting to high-frequency data pipeline...
-                           </p>
-                        </div>
-                     </div>
+                   {/* Decision Intelligence (Logs) */}
+                  <div className="glass-card rounded-2xl border border-white/5 overflow-hidden flex flex-col shadow-2xl h-[450px]">
+                    <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between bg-white/[0.01]">
+                      <h2 className="text-xs font-black uppercase tracking-tight text-white italic flex items-center gap-2">
+                         <Zap size={14} className="text-cyan-neon" />
+                         Decision Intelligence
+                      </h2>
+                      <span className="text-[9px] font-mono text-white/40">{decisionLogs.length} Events</span>
+                    </div>
+                    <div className="overflow-y-auto flex-1 font-mono text-[10px]">
+                      <table className="w-full text-left">
+                        <thead className="sticky top-0 bg-[#08080A]/90 backdrop-blur border-b border-white/5 z-10">
+                          <tr>
+                            <th className="px-4 py-3 font-black text-white/30 uppercase tracking-widest text-[9px]">RFQ ID</th>
+                            <th className="px-4 py-3 font-black text-white/30 uppercase tracking-widest text-[9px]">Decision</th>
+                            <th className="px-4 py-3 font-black text-white/30 uppercase tracking-widest text-center text-[9px]">Price</th>
+                            <th className="px-4 py-3 font-black text-white/30 uppercase tracking-widest text-right text-[9px]">Latency</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5">
+                          {decisionLogs.length > 0 ? (
+                            decisionLogs.map((log, i) => (
+                              <tr key={i} className="hover:bg-white/[0.01] transition-colors group">
+                                <td className="px-4 py-3 text-white/40 group-hover:text-white/60">{log.rfq_id}</td>
+                                <td className="px-4 py-3">
+                                  {log.quoted ? (
+                                    <span className="text-chart-green flex items-center gap-1 font-black uppercase italic">
+                                      <FileCheck size={10} /> QUOTED
+                                    </span>
+                                  ) : (
+                                    <span className="text-magenta-cyber flex items-center gap-1 font-black uppercase italic">
+                                      <Ban size={10} /> {log.skip_reason?.toUpperCase() || "SKIPPED"}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-center text-white/80 font-black">
+                                  {log.yes ? `${log.yes}¢` : "---"}
+                                </td>
+                                <td className="px-4 py-3 text-right text-cyan-neon font-black italic">
+                                  {log.latency ? `${log.latency.toFixed(1)}ms` : "---"}
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={4} className="px-4 py-20 text-center text-white/10 italic">
+                                 Awaiting RFQ stream...
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                </div>
 

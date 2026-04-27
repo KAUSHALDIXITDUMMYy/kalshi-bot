@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
 const BOT_URL = process.env.BOT_URL || 'http://localhost:8080';
 
 export async function GET() {
@@ -8,7 +10,8 @@ export async function GET() {
       headers: {
         'Authorization': `Bearer ${process.env.INTERNAL_SHARED_SECRET}`,
       },
-      next: { revalidate: 1 }, // Cache for 1 second
+      cache: 'no-store',
+      next: { revalidate: 0 },
     });
 
     if (!res.ok) {
