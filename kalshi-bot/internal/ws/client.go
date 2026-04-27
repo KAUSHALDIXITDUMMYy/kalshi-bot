@@ -17,13 +17,14 @@ import (
 type Handler func(ctx context.Context, payload []byte)
 
 // RunDialLoop connects with Kalshi auth headers, subscribes to communications, and processes messages until ctx done.
-func RunDialLoop(ctx context.Context, log *slog.Logger, wsURL string, signer *auth.Signer, onMessage Handler, channels []string, params map[string]any, shardFactor, shardKey int) {
+// dynamicSub is an optional channel to send additional tickers to subscribe to mid-connection.
+func RunDialLoop(ctx context.Context, log *slog.Logger, wsURL string, signer *auth.Signer, onMessage Handler, channels []string, params map[string]any, shardFactor, shardKey int, dynamicSub <-chan []string) {
 	backoff := time.Second
 	for {
 		if ctx.Err() != nil {
 			return
 		}
-		err := oneConnection(ctx, log, wsURL, signer, onMessage, channels, params, shardFactor, shardKey)
+		err := oneConnection(ctx, log, wsURL, signer, onMessage, channels, params, shardFactor, shardKey, dynamicSub)
 		if ctx.Err() != nil {
 			return
 		}
@@ -44,7 +45,7 @@ func RunDialLoop(ctx context.Context, log *slog.Logger, wsURL string, signer *au
 
 var cmdID atomic.Uint32
 
-func oneConnection(ctx context.Context, log *slog.Logger, wsURL string, signer *auth.Signer, onMessage Handler, channels []string, extraParams map[string]any, shardFactor, shardKey int) error {
+func oneConnection(ctx context.Context, log *slog.Logger, wsURL string, signer *auth.Signer, onMessage Handler, channels []string, extraParams map[string]any, shardFactor, shardKey int, dynamicSub <-chan []string) error {
 	ts := strconv.FormatInt(time.Now().UnixMilli(), 10)
 	sig, err := signer.SignWebSocket(ts)
 	if err != nil {
@@ -111,6 +112,23 @@ func oneConnection(ctx context.Context, log *slog.Logger, wsURL string, signer *
 			return ctx.Err()
 		case err := <-readErr:
 			return err
+		case newTickers := <-dynamicSub:
+			if len(newTickers) == 0 {
+				continue
+			}
+			subID := cmdID.Add(1)
+			sub := map[string]any{
+				"id":  subID,
+				"cmd": "subscribe",
+				"params": map[string]any{
+					"channels":       channels,
+					"market_tickers": newTickers,
+				},
+			}
+			if err := conn.WriteJSON(sub); err != nil {
+				return err
+			}
+			log.Info("dynamic subscription added", "tickers", newTickers, "cmd_id", subID)
 		case <-tick.C:
 			deadline := time.Now().Add(5 * time.Second)
 			if err := conn.WriteControl(websocket.PingMessage, []byte("ping"), deadline); err != nil {

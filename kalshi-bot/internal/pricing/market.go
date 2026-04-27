@@ -25,9 +25,15 @@ func NewMarketEngine(cfg *config.Config, pc *PriceCache, vig VigProvider) Engine
 func (e *marketEngine) Price(ctx context.Context, r RFQInput) (string, string, error) {
 	// 1. Calculate the Market Cost (using Asks)
 	// This is what it would cost the user to buy these legs manually from the order book.
+	// Normalize legs: if MVESelectedLegs is empty, use the top-level MarketTicker
+	legs := r.MVESelectedLegs
+	if len(legs) == 0 && r.MarketTicker != "" {
+		legs = []MVELeg{{MarketTicker: r.MarketTicker, Side: "yes"}} // Default to YES fair value
+	}
+
 	marketBuyProb := 1.0
 
-	for _, leg := range r.MVESelectedLegs {
+	for _, leg := range legs {
 		ticker := leg.MarketTicker
 		side := leg.Side
 
@@ -71,7 +77,7 @@ func (e *marketEngine) Price(ctx context.Context, r RFQInput) (string, string, e
 	marketPriceCents := marketBuyProb * 100.0
 
 	// 3. Correlation Detection Engine
-	correlation := DetectCorrelation(r.MVESelectedLegs)
+	correlation := DetectCorrelation(legs)
 	
 	if correlation.ShouldDecline {
 		return "", "", fmt.Errorf("RFQ declined due to correlation policy: %s", correlation.Reason)
@@ -83,20 +89,32 @@ func (e *marketEngine) Price(ctx context.Context, r RFQInput) (string, string, e
 	// correlation penalty formula from 3.md Line 783
 	corrAdj := marketPriceCents * (correlation.VigMultiplier - 1.0) * 0.5
 	
-	totalDeduction := baseVig + corrAdj
-	quotedYesPriceCents := int(marketPriceCents) - int(totalDeduction)
+	totalDeduction := int(baseVig + corrAdj)
 
-	// 5. Safety Guard: Never quote below 2 cents (Per implementation_requirements.md 3.B.4)
-	if quotedYesPriceCents < 2 {
-		quotedYesPriceCents = 2
+	// MARKET MAKER LOGIC:
+	// To make a profit, we must SELL at a higher price than the fair market value.
+	// We add the totalDeduction (Vig) to BOTH sides.
+	quotedYesPriceCents := int(marketPriceCents) + totalDeduction
+	quotedNoPriceCents := (100 - int(marketPriceCents)) + totalDeduction
+
+	// 5. Safety Guard: Capping
+	// Kalshi contracts must be between 1 and 99 cents.
+	// We also ensure we don't quote so high that it becomes impossible (e.g. > 99).
+	if quotedYesPriceCents > 99 {
+		quotedYesPriceCents = 99
 	}
-	// 6. Safety Guard: Never quote above 98 cents (Kalshi limits)
-	if quotedYesPriceCents > 98 {
-		quotedYesPriceCents = 98
+	if quotedYesPriceCents < 1 {
+		quotedYesPriceCents = 1
+	}
+	if quotedNoPriceCents > 99 {
+		quotedNoPriceCents = 99
+	}
+	if quotedNoPriceCents < 1 {
+		quotedNoPriceCents = 1
 	}
 
 	yesBidDollars := fmt.Sprintf("%.2f", float64(quotedYesPriceCents)/100.0)
-	noBidDollars := fmt.Sprintf("%.2f", float64(100-quotedYesPriceCents)/100.0)
+	noBidDollars := fmt.Sprintf("%.2f", float64(quotedNoPriceCents)/100.0)
 
 	return yesBidDollars, noBidDollars, nil
 }

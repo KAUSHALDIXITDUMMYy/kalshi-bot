@@ -126,10 +126,14 @@ func (t *activeRFQTracker) ReleaseLock(id string) {
 	}
 }
 
-func (t *activeRFQTracker) remove(id string) {
+func (t *activeRFQTracker) remove(id string) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	delete(t.rfqs, id)
+	_, ok := t.rfqs[id]
+	if ok {
+		delete(t.rfqs, id)
+	}
+	return ok
 }
 
 func (t *activeRFQTracker) Get(id string) (pricing.RFQInput, bool) {

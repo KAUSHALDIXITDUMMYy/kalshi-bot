@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"log/slog"
+	"runtime"
 	"strconv"
 	"time"
 
@@ -74,6 +76,7 @@ type Response struct {
 	Trackers        map[string]int `json:"trackers"`
 	Safety          map[string]any `json:"safety"`
 	Postgres        string         `json:"postgres"`
+	MemoryMB        uint64         `json:"memory_mb"`
 }
 
 // HandleHealth provides a snapshot of the bot's state using a Redis pipeline.
@@ -163,6 +166,11 @@ func (s *Server) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	// Internal Trackers
 	resp.Trackers = s.eng.GetStats()
 
+	// Memory Stats
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	resp.MemoryMB = m.Alloc / 1024 / 1024
+
 	// Safety Monitor
 	errCount, lastErr, latency := s.safety.GetStatus()
 	resp.Safety = map[string]any{
@@ -242,6 +250,15 @@ func (s *Server) HandleConfig(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// Log specific admin actions to the Go terminal for visibility
+		if body.Key == "circuit:global" {
+			if body.Value == "HALT" {
+				slog.Error("!!! ADMIN ACTION: Operations HALTED via Dashboard !!!")
+			} else {
+				slog.Info("!!! ADMIN ACTION: Operations RESUMED via Dashboard !!!")
+			}
+		}
+
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]bool{"success": true})
 		return
@@ -288,6 +305,57 @@ func (s *Server) HandleAudit(w http.ResponseWriter, r *http.Request) {
 			"cost_cents": cost,
 			"max_payout_cents": payout,
 			"confirmed_at": confirmedAt,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(logs)
+}
+
+// HandleDecisionLogs GET returns the last 50 RFQ decisions (quoted or skipped)
+func (s *Server) HandleDecisionLogs(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	rows, err := s.db.Query(ctx, `
+		SELECT 
+			r.quote_req_id, r.sport, r.leg_count, r.quoted, r.skip_reason,
+			q.quote_id, q.yes_price_cents, q.no_price_cents, q.latency_ms
+		FROM rfq_log r
+		LEFT JOIN quote_log q ON r.quote_req_id = q.quote_req_id
+		ORDER BY r.quote_req_id DESC
+		LIMIT 50
+	`)
+	if err != nil {
+		http.Error(w, "Database query failed", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	logs := make([]map[string]any, 0)
+	for rows.Next() {
+		var qrid, sport string
+		var legCount int
+		var quoted bool
+		var skipReason string
+		var qid *string
+		var yes, no *int
+		var latency *float64
+		
+		if err := rows.Scan(&qrid, &sport, &legCount, &quoted, &skipReason, &qid, &yes, &no, &latency); err != nil {
+			continue
+		}
+		
+		logs = append(logs, map[string]any{
+			"rfq_id":      qrid,
+			"sport":       sport,
+			"leg_count":   legCount,
+			"quoted":      quoted,
+			"skip_reason": skipReason,
+			"quote_id":    qid,
+			"yes":         yes,
+			"no":          no,
+			"latency":     latency,
 		})
 	}
 

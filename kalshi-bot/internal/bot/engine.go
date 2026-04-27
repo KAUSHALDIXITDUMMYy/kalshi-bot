@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"math"
+	"sync/atomic"
 	"rfqbot/internal/config"
 	"rfqbot/internal/db"
 	"rfqbot/internal/kalshi"
@@ -32,9 +33,14 @@ type Engine struct {
 	safety     *SafetyMonitor
 	quotes     *quoteTracker
 	activeRFQs *activeRFQTracker
+	dynamicSub chan []string
+
+	// Metrics
+	rfqsReceived atomic.Uint64
+	startTime    time.Time
 }
 
-func NewEngine(cfg *config.Config, log *slog.Logger, client *kalshi.Client, pe pricing.Engine, pc *pricing.PriceCache, pool *pgxpool.Pool, rdb *redis.Client, dbLog *db.Logger, risk *RiskEngine, safety *SafetyMonitor) *Engine {
+func NewEngine(cfg *config.Config, log *slog.Logger, client *kalshi.Client, pe pricing.Engine, pc *pricing.PriceCache, pool *pgxpool.Pool, rdb *redis.Client, dbLog *db.Logger, risk *RiskEngine, safety *SafetyMonitor, dynamicSub chan []string) *Engine {
 	return &Engine{
 		cfg:        cfg,
 		log:        log,
@@ -48,6 +54,8 @@ func NewEngine(cfg *config.Config, log *slog.Logger, client *kalshi.Client, pe p
 		safety:     safety,
 		quotes:     newQuoteTracker(),
 		activeRFQs: newActiveRFQTracker(),
+		dynamicSub: dynamicSub,
+		startTime:  time.Now(),
 	}
 }
 
@@ -98,9 +106,10 @@ func (e *Engine) HandleWSMessage(ctx context.Context, payload []byte) {
 	case "rfq_deleted":
 		var msg struct { ID string `json:"id"` }
 		if err := json.Unmarshal(env.Msg, &msg); err == nil {
-			e.activeRFQs.remove(msg.ID)
+			if e.activeRFQs.remove(msg.ID) {
+				e.rdb.Decr(ctx, "rfq:count:open")
+			}
 		}
-		e.rdb.Decr(ctx, "rfq:count:open")
 		e.log.Debug("ws event", "type", typ, "body", string(payload))
 	case "subscribed", "ok", "error":
 		e.log.Info("ws control", "type", typ, "body", string(payload))
@@ -137,6 +146,7 @@ func (e *Engine) onRFQCreated(ctx context.Context, rawMsg json.RawMessage) {
 
 	// Increment open RFQ count in Redis
 	e.rdb.Incr(ctx, "rfq:count:open")
+	e.rfqsReceived.Add(1)
 
 	start := time.Now()
 	// Always calculate price for visibility/logging
@@ -150,6 +160,14 @@ func (e *Engine) onRFQCreated(ctx context.Context, rawMsg json.RawMessage) {
 	skipReason := ""
 	if err != nil {
 		skipReason = err.Error()
+		// If it's a cache miss, trigger a dynamic subscription for the missing ticker
+		// We use a non-blocking send to avoid hanging the engine if the buffer is full
+		if rfq.MarketTicker != "" {
+			select {
+			case e.dynamicSub <- []string{rfq.MarketTicker}:
+			default:
+			}
+		}
 	} else if !e.cfg.QuoteEnabled {
 		skipReason = "quote_disabled"
 	} else if e.cfg.DryRun {
@@ -228,6 +246,7 @@ func (e *Engine) onRFQCreated(ctx context.Context, rawMsg json.RawMessage) {
 	if err != nil {
 		e.log.Error("create quote failed", "rfq_id", rfq.ID, "err", err)
 		e.safety.RecordError(ctx, err)
+		e.rdb.Decr(ctx, "rfq:count:open")
 		return
 	}
 
@@ -451,9 +470,18 @@ func parseFloat(s string) float64 {
 
 // GetStats returns internal metrics for the health API.
 func (e *Engine) GetStats() map[string]int {
+	// Calculate throughput (RFQs per minute)
+	uptimeSecs := time.Since(e.startTime).Seconds()
+	throughput := 0
+	if uptimeSecs > 5 {
+		throughput = int(float64(e.rfqsReceived.Load()) / uptimeSecs * 60)
+	}
+
 	return map[string]int{
 		"active_rfqs":    e.activeRFQs.Count(),
 		"tracked_quotes": e.quotes.Count(),
 		"price_cache":    e.cache.Count(),
+		"throughput":     throughput,
+		"uptime_mins":    int(uptimeSecs / 60),
 	}
 }

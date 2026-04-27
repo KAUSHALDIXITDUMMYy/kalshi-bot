@@ -69,7 +69,11 @@ func main() {
 
 	dbLog := db.NewLogger(pool)
 	safety := bot.NewSafetyMonitor(log, rdb)
-	eng := bot.NewEngine(cfg, log, kc, pe, pc, pool, rdb, dbLog, risk, safety)
+	
+	// Dynamic subscription channel for missing tickers
+	dynamicSub := make(chan []string, 100)
+	
+	eng := bot.NewEngine(cfg, log, kc, pe, pc, pool, rdb, dbLog, risk, safety, dynamicSub)
 	eng.StartBackgroundCleanup(ctx)
 
 	clock := bot.NewClockMonitor(log, safety)
@@ -92,6 +96,7 @@ func main() {
 	mux.HandleFunc("/health", healthSrv.WithAuth(healthSrv.HandleHealth))
 	mux.HandleFunc("/config", healthSrv.WithAuth(healthSrv.HandleConfig))
 	mux.HandleFunc("/audit", healthSrv.WithAuth(healthSrv.HandleAudit))
+	mux.HandleFunc("/logs", healthSrv.WithAuth(healthSrv.HandleDecisionLogs))
 	healthPort := os.Getenv("HEALTH_PORT")
 	if healthPort == "" {
 		healthPort = "8080"
@@ -118,7 +123,7 @@ func main() {
 
 	// 2. Market Lifecycle Loop (Settlement/Risk Unclogging)
 	// We do not need specific tickers to listen to general lifecycle events
-	go ws.RunDialLoop(ctx, log, cfg.WebSocketURL, signer, eng.HandleWSMessage, []string{"market_lifecycle_v2"}, nil, 0, 0)
+	go ws.RunDialLoop(ctx, log, cfg.WebSocketURL, signer, eng.HandleWSMessage, []string{"market_lifecycle_v2"}, nil, 0, 0, nil)
 
 	// 3. Orderbook Loop (Market Data)
 	if len(tickers) > 0 {
@@ -126,7 +131,7 @@ func main() {
 			"market_tickers": tickers,
 		}
 		// orderbook_delta does not support sharding, pass 0, 0
-		go ws.RunDialLoop(ctx, log, cfg.WebSocketURL, signer, eng.HandleWSMessage, []string{"orderbook_delta"}, params, 0, 0)
+		go ws.RunDialLoop(ctx, log, cfg.WebSocketURL, signer, eng.HandleWSMessage, []string{"orderbook_delta"}, params, 0, 0, dynamicSub)
 	}
 
 	// 4. Cache Warm-Up
@@ -136,7 +141,7 @@ func main() {
 	time.Sleep(3 * time.Second)
 
 	// 5. Communications Loop (RFQs)
-	go ws.RunDialLoop(ctx, log, cfg.WebSocketURL, signer, eng.HandleWSMessage, []string{"communications"}, nil, cfg.ShardFactor, cfg.ShardKey)
+	go ws.RunDialLoop(ctx, log, cfg.WebSocketURL, signer, eng.HandleWSMessage, []string{"communications"}, nil, cfg.ShardFactor, cfg.ShardKey, nil)
 
 	<-ctx.Done()
 	log.Info("shutdown")
